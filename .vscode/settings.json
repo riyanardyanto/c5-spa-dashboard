@@ -1,0 +1,7 @@
+{
+    "liveServer.settings.port": 5501,
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    }
+}

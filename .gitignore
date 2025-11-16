@@ -1,0 +1,28 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+
+# Logs and runtime files
+logs/
+*.log
+
+# Configuration secrets
+config.ini
+
+# Data directories
+data/
+target/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# OS-specific
+Thumbs.db
+.DS_Store
