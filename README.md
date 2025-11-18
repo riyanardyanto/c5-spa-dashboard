@@ -28,15 +28,15 @@ To create a standalone executable file:
 
 2. **Build the executable**
 
-   ```powershell
-   uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "dashboard_view.py;." main.py
-   ```
+```powershell
+uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "hooks;hooks" --add-data "dashboard_view.py;." main.py
+```
 
-   Or use the generated spec file for faster rebuild:
+Or use the generated spec file for faster rebuild:
 
-   ```powershell
-   uv run pyinstaller SPA-Dashboard.spec
-   ```
+```powershell
+uv run pyinstaller SPA-Dashboard.spec
+```
 
 3. **Find the executable**
    - The executable will be created in the `dist` folder: `dist\SPA-Dashboard.exe`
@@ -131,7 +131,7 @@ PyInstaller runtime hook (included)
   - When building with PyInstaller from the command line, pass the hook with
     the `--runtime-hook` option. Example:
 
-    uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "dashboard_view.py;." --runtime-hook hooks/runtime_hook_patched_hashlib.py main.py
+  uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "hooks;hooks" --add-data "dashboard_view.py;." --runtime-hook hooks/runtime_hook_patched_hashlib.py main.py
 
   - If you prefer using a spec file, add the hook path to the `Analysis` as
     `runtime_hooks`: e.g.
@@ -152,3 +152,28 @@ PyInstaller runtime hook (included)
 
   - The hook is low-risk: it only ensures the same fallback behavior that's
     used when running from source via `utils/patched_hashlib.py`.
+
+Hook debug & log location
+
+- The runtime hook supports optional diagnostic logging controlled by the
+  environment variable `PATCHED_HASHLIB_HOOK_DEBUG`. When set to a truthy
+  value (`1`, `true`, `yes`, `y`) the hook emits a small diagnostic file
+  named `patched_hook_run.txt`.
+
+- Where the file is written:
+
+  - When running from source the hook will try to create and write to
+    `logs/patched_hook_run.txt` in the project root.
+  - When running a frozen executable the hook will try to write to
+    `logs/patched_hook_run.txt` next to the executable.
+  - If those locations are not writable the hook falls back to the system
+    temporary directory.
+
+- Example (PowerShell): enable debug and build/run so the hook writes logs:
+
+```powershell
+$env:PATCHED_HASHLIB_HOOK_DEBUG='1'; uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "hooks;hooks" --add-data "dashboard_view.py;." --runtime-hook hooks/runtime_hook_patched_hashlib.py main.py
+```
+
+After running, inspect `logs/patched_hook_run.txt` next to the project or
+executable; if it's not present check the system temp directory.
