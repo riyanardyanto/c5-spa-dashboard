@@ -211,7 +211,9 @@ class DashboardView(ttk.Frame):
                         target_value = target_lookup.get(metric_key)
                         if target_value is not None:
                             values[1] = (
-                                "" if pd.isna(target_value) else str(target_value)
+                                ""
+                                if pd.isna(target_value)
+                                else str(target_value).strip("%")
                             )
                             self.table_frame.result_table.view.item(
                                 row_id, values=values
