@@ -1,3 +1,4 @@
+import utils.patched_hashlib  # ensure md4 support in hashlib for ntlm_auth  # noqa: F401
 import ttkbootstrap as ttk
 
 from dashboard_view import DashboardView
