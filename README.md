@@ -67,3 +67,88 @@ To create a standalone executable file:
   - `Report` opens a preview window combining the metrics table (when enabled) with a Markdown-style summary of cards.
 - **Edit targets**
   - `Target Editor` lets you adjust per-shift target values stored alongside the SPA data. Save changes before closing.
+
+## MD4 fallback (ntlm / SPA auth compatibility)
+
+Starting from this commit the application includes a safe runtime fallback
+for the MD4 hash algorithm used by some NTLM libraries. This solves the
+ValueError "unsupported hash type md4" that can occur on Python builds
+where OpenSSL does not expose MD4.
+
+What changed
+
+`main.py`. It ensures `hashlib.new('md4', ...)` and `hashlib.md4(...)`
+are available at runtime. If the system has `pycryptodome` installed,
+that implementation is preferred; otherwise a compact pure-Python MD4
+implementation is used as a fallback.
+
+Why this helps
+
+call `hashlib.new('md4', ...)`. If your Python/OpenSSL does not support
+MD4, those calls raise a ValueError and the app fails when fetching
+SPA data. The fallback restores compatibility without requiring a
+system-level OpenSSL rebuild.
+
+Optional: prefer a compiled implementation
+
+MD4 implementation and better performance. On Windows `pycryptodomex`
+may attempt to build C extensions and require the Microsoft C++ Build
+Tools (Visual C++ 14.0+). If you want the compiled implementation,
+either install a wheel or install the build tools:
+
+```powershell
+# Install the pure-Python-friendly package (wheels available)
+.\.venv\Scripts\Activate.ps1
+python -m pip install pycryptodome
+
+# Or, to build pycryptodomex from source on Windows you'll need the
+# Visual C++ Build Tools. Download and install them from:
+# https://visualstudio.microsoft.com/visual-cpp-build-tools/
+```
+
+Testing the MD4 support
+
+Run the tests in the project's venv:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pytest -q
+```
+
+If you prefer not to install compiled crypto libraries, the fallback
+remains in place and the application will continue to function correctly
+— at lower performance for MD4-heavy workloads.
+
+PyInstaller runtime hook (included)
+
+- This repository includes a PyInstaller runtime hook at `hooks/runtime_hook_patched_hashlib.py`.
+  The hook ensures the patched MD4 implementation is loaded early in frozen
+  builds so that extensions or libraries which call `hashlib.new('md4', ...)`
+  succeed at runtime.
+
+- Usage:
+
+  - When building with PyInstaller from the command line, pass the hook with
+    the `--runtime-hook` option. Example:
+
+    uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "dashboard_view.py;." --runtime-hook hooks/runtime_hook_patched_hashlib.py main.py
+
+  - If you prefer using a spec file, add the hook path to the `Analysis` as
+    `runtime_hooks`: e.g.
+
+    Analysis(
+    [...],
+    runtime_hooks=['hooks/runtime_hook_patched_hashlib.py'],
+    [...]
+    )
+
+  Why this helps:
+
+  - In a frozen application imports and module initialization happen in a
+    different order and earlier than when running from source. The runtime
+    hook forces the patched MD4 shim to be loaded before other modules that
+    might request MD4, avoiding `ValueError: unsupported hash type md4` in
+    the frozen executable.
+
+  - The hook is low-risk: it only ensures the same fallback behavior that's
+    used when running from source via `utils/patched_hashlib.py`.

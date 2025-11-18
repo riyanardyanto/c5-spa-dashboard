@@ -21,7 +21,6 @@ target/
 # PyInstaller build artifacts
 build/
 dist/
-*.spec
 
 # OS-specific
 Thumbs.db
