@@ -10,11 +10,11 @@ from tkinter import Misc, font as tkfont
 from services.logging_service import log_warning
 
 MATERIAL_PALETTE: Dict[str, str] = {
-    "primary": "#4C9BFF",
+    "primary": "#007BFF",
     "on_primary": "#041B36",
     "primary_container": "#123862",
     "on_primary_container": "#D6E4FF",
-    "secondary": "#FFB86B",
+    "secondary": "#6C757D",
     "on_secondary": "#331B00",
     "tertiary": "#9C94FF",
     "on_tertiary": "#FFFFFF",
@@ -30,8 +30,8 @@ MATERIAL_PALETTE: Dict[str, str] = {
     "on_error": "#410306",
     "warning": "#FFC85C",
     "on_warning": "#2A1A00",
-    "success": "#5CFF38",
-    "on_success": "#032019",
+    "success": "#27BE2A",
+    "on_success": "#0320fF19",
 }
 
 _WHITE = "#FFFFFF"
@@ -98,7 +98,7 @@ def apply_material_theme(window: ttk.Window) -> Dict[str, str]:
         log_warning("Tema superhero tidak tersedia, menggunakan tema default", exc)
 
     font_family = _pick_font_family(window)
-    body_font = (font_family, 10)
+    body_font = (font_family, 8)
     title_font = (font_family, 12, "bold")
     subtitle_font = (font_family, 9, "italic")
     caption_font = (font_family, 9)
@@ -207,7 +207,7 @@ def apply_material_theme(window: ttk.Window) -> Dict[str, str]:
     configure_button("primary", palette["primary"], palette["on_primary"])
     configure_button(
         "success",
-        _mix(palette["success"], palette["primary"], 0.3),
+        _mix(palette["success"], palette["success"], 0.5),
         palette["on_success"],
     )
     configure_button(

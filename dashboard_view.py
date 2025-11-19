@@ -96,6 +96,12 @@ class DashboardView(ttk.Frame):
         """Persist all issue cards to the shared CSV using record_service."""
 
         self.header_frame.start_progress()
+        # Prevent duplicate saves by disabling the save button while operation is running
+        if hasattr(self.sidebar, "btn_save"):
+            try:
+                self.sidebar.btn_save.configure(state="disabled")
+            except Exception:
+                pass
         try:
             username = (
                 getattr(self.sidebar.entry_user, "get", lambda: "")() or ""
@@ -127,7 +133,8 @@ class DashboardView(ttk.Frame):
                 return
 
             try:
-                destination = append_cards_to_csv(rows)
+                # Disk IO and pandas operations can be blocking; offload to a thread
+                destination = await asyncio.to_thread(append_cards_to_csv, rows)
             except Exception as exc:  # noqa: BLE001 - surface error to user
                 log_exception("Gagal menyimpan data issue card", exc)
                 messagebox.showerror(
@@ -137,7 +144,8 @@ class DashboardView(ttk.Frame):
                 )
                 return
 
-            save_user(username)
+            # Save username - keep it in a thread to avoid blocking (lightweight)
+            await asyncio.to_thread(save_user, username)
             messagebox.showinfo(
                 "Sukses",
                 f"Data issue card berhasil disimpan ke:\n{destination}",
@@ -145,6 +153,11 @@ class DashboardView(ttk.Frame):
             )
         finally:
             self.header_frame.stop_progress()
+            if hasattr(self.sidebar, "btn_save"):
+                try:
+                    self.sidebar.btn_save.configure(state="normal")
+                except Exception:
+                    pass
 
     @async_handler
     async def get_data(self) -> None:
@@ -158,14 +171,12 @@ class DashboardView(ttk.Frame):
             shift_column = shift_label if shift_label else ""
             date_value = self.sidebar.dt.get_date().strftime("%Y-%m-%d")
 
-            # url = "http://127.0.0.1:5501/assets/spa3.html"
             url = self._get_url(
                 lu_value,
                 date_value,
                 shift_number,
                 func_code,
             )
-            print(f"Generated URL: {url}")
 
             target_path = get_targets_file_path(lu_value, func_code)
             try:
@@ -295,7 +306,7 @@ class DashboardView(ttk.Frame):
         select_date = self.sidebar.dt.get_date().strftime("%Y-%m-%d")
 
         header = f"*{func_location} {lu}* | {select_date}, {select_shift}"
-        content = f"{header}\n" + "\n".join(lines).strip()
+        content = "\n".join(lines).strip()
 
         include_table = True
         if hasattr(self.sidebar, "include_table"):

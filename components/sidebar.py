@@ -101,7 +101,7 @@ class Sidebar(ttk.Frame):
         self.select_shift.set("Shift 1")
 
         self.btn_get_data = self._create_button(
-            section, "Get Data", SUCCESS, "Get data stop reason from SPA"
+            section, "Get Data", "success", "Get data stop reason from SPA"
         )
         self.btn_get_data.pack(fill=X, pady=(2, 0))
 
@@ -137,7 +137,7 @@ class Sidebar(ttk.Frame):
         section.columnconfigure(0, weight=1)
 
         self.btn_report = self._create_button(
-            section, "View Report", "info", "Open Report Window"
+            section, "View Report", "warning", "Open Report Window"
         )
         self.btn_report.pack(fill=X, pady=(8, 2))
 
