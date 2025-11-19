@@ -10,28 +10,43 @@ from tkinter import Misc, font as tkfont
 from services.logging_service import log_warning
 
 MATERIAL_PALETTE: Dict[str, str] = {
-    "primary": "#007BFF",
-    "on_primary": "#041B36",
-    "primary_container": "#123862",
+    # Primary and related
+    "primary": "#0d6efd",  # ttkbootstrap/Bootstrap primary
+    "on_primary": "#ffffff",
+    "primary_container": "#0b5ed7",
     "on_primary_container": "#D6E4FF",
-    "secondary": "#6C757D",
-    "on_secondary": "#331B00",
-    "tertiary": "#9C94FF",
-    "on_tertiary": "#FFFFFF",
+    # Secondary
+    "secondary": "#6c757d",
+    "on_secondary": "#ffffff",
+    # Info/Tertiary (keep `tertiary` for backward compatibility)
+    "tertiary": "#0dcaf0",
+    "info": "#0dcaf0",
+    "on_tertiary": "#000000",
+    "on_info": "#000000",
+    # Background / Surface (theme-specific - kept dark for "superhero" base theme)
     "background": "#1F2A37",
     "on_background": "#E4ECF5",
     "surface": "#243447",
     "on_surface": "#E4ECF5",
     "surface_variant": "#3A4B5E",
     "on_surface_variant": "#C8D4E3",
+    # Outline / variants
     "outline": "#5B7089",
     "outline_variant": "#3A4B5E",
-    "error": "#FF7A78",
-    "on_error": "#410306",
-    "warning": "#FFC85C",
-    "on_warning": "#2A1A00",
-    "success": "#27BE2A",
-    "on_success": "#0320fF19",
+    # Error / Danger
+    "error": "#dc3545",
+    "on_error": "#ffffff",
+    # Warning
+    "warning": "#ffc107",
+    "on_warning": "#000000",
+    # Success
+    "success": "#1D9F1D",
+    "on_success": "#ffffff",
+    # Common light/dark (optional helpers)
+    "light": "#f8f9fa",
+    "on_light": "#000000",
+    "dark": "#212529",
+    "on_dark": "#ffffff",
 }
 
 _WHITE = "#FFFFFF"

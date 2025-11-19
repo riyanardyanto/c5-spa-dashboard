@@ -197,7 +197,11 @@ class Sidebar(ttk.Frame):
         btn_style = button.cget("style")
         if btn_style:
             ttk_style = ttk.Style()
-            text_color = self.palette.get("on_primary", "#FFFFFF")
+            # Use a slightly darker text color for warning buttons (e.g., View Report)
+            if style == "warning":
+                text_color = self.palette.get("on_warning", "#BCBABA")
+            else:
+                text_color = self.palette.get("on_primary", "#FFFFFF")
             disabled_color = self.palette.get("on_surface_variant", "#8A97AA")
             ttk_style.configure(btn_style, foreground=text_color)
             ttk_style.map(
