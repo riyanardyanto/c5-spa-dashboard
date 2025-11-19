@@ -151,8 +151,11 @@ class DataFrameSplitter:
 
     def split_by_column_14(self) -> list[pd.DataFrame]:
         """Split the fourth table by rows where column 14 has value 'i'."""
-        # Select the fourth table as main datatable
-        datatable = self.tables[3]
+        # Select the table with more than 20 rows
+        for table in self.tables:
+            if len(table) > 20:
+                datatable = table
+                break
 
         # Remove duplicate rows
         datatable = DataFrameCleaner.remove_duplicate_rows(datatable)

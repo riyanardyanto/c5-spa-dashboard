@@ -23,6 +23,7 @@ from utils.app_config import AppDataConfig
 from utils.csvhandle import get_targets_file_path, save_user
 from utils.csvhandle import load_users
 from async_tkinter_loop import async_handler
+import asyncio
 
 MATERIAL_SECTION_PADDING = (16, 12, 16, 16)
 
@@ -166,13 +167,16 @@ class DashboardView(ttk.Frame):
 
             target_path = get_targets_file_path(lu_value, func_code)
             try:
-                targets_df = pd.read_csv(target_path)
+                # pd.read_csv is blocking; run it in a thread to avoid freezing the UI
+                targets_df = await asyncio.to_thread(pd.read_csv, target_path)
             except (FileNotFoundError, pd.errors.EmptyDataError, OSError):
                 targets_df = pd.DataFrame()
 
             try:
+                # SPADataProcessor.process performs network IO and heavy parsing
+                # which are blocking; run it on a thread to keep the Tk event loop
                 processor = SPADataProcessor(url=url, config=self.data_config)
-                processed = processor.process()
+                processed = await asyncio.to_thread(processor.process)
             except Exception as exc:  # noqa: BLE001 - propagate via UI and log
                 log_exception("Gagal memproses data dari SPA", exc)
                 messagebox.showerror(
@@ -415,6 +419,6 @@ class DashboardView(ttk.Frame):
                 if parsed.scheme and parsed.netloc:
                     return candidate
 
-            return "http://127.0.0.1:5501/assets/spa1.html"
+            return "http://127.0.0.1:5501/assets/spa3.html"
 
         return ""
