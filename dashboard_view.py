@@ -158,12 +158,14 @@ class DashboardView(ttk.Frame):
             shift_column = shift_label if shift_label else ""
             date_value = self.sidebar.dt.get_date().strftime("%Y-%m-%d")
 
+            # url = "http://127.0.0.1:5501/assets/spa3.html"
             url = self._get_url(
                 lu_value,
                 date_value,
                 shift_number,
                 func_code,
             )
+            print(f"Generated URL: {url}")
 
             target_path = get_targets_file_path(lu_value, func_code)
             try:
@@ -410,6 +412,9 @@ class DashboardView(ttk.Frame):
             )
 
         if env_value == "development":
+            return "http://127.0.0.1:5501/assets/spa3.html"
+
+        if env_value == "test":
             candidate = ""
             if isinstance(self.data_config, AppDataConfig) and self.data_config.url:
                 candidate = self.data_config.url.strip()
@@ -418,7 +423,5 @@ class DashboardView(ttk.Frame):
                 parsed = urlparse(candidate)
                 if parsed.scheme and parsed.netloc:
                     return candidate
-
-            return "http://127.0.0.1:5501/assets/spa3.html"
 
         return ""

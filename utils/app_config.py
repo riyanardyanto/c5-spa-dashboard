@@ -21,7 +21,6 @@ class AppDataConfig:
     password: str
     link_up: Tuple[str, ...]
     url: str
-    parameter: str
 
     @classmethod
     def from_parser(
@@ -43,7 +42,6 @@ class AppDataConfig:
         password = get(section_name, "password", fallback="")
         link_up_raw = get(section_name, "link_up", fallback="")
         url = get(section_name, "url", fallback="")
-        parameter = get(section_name, "parameter", fallback="")
 
         link_up = cls._normalize_links(link_up_raw)
 
@@ -53,7 +51,6 @@ class AppDataConfig:
             password=password.strip(),
             link_up=link_up,
             url=url.strip(),
-            parameter=parameter.strip(),
         )
 
     @staticmethod
@@ -70,7 +67,6 @@ class AppDataConfig:
             "password": self.password,
             "link_up": self.link_up,
             "url": self.url,
-            "parameter": self.parameter,
         }
 
 
@@ -96,8 +92,7 @@ def create_config(path: Path | None = None) -> Path:
         "username": "your_username",
         "password": "your_password",
         "link_up": ",".join(link_up),
-        "url": "http://",
-        "parameter": "db_SegmentDateMin=2023-10-01&db_ShiftStart=06:00&db_ShiftEnd=14:00",
+        "url": "https://ots.spappa.aws.private-pmideep.biz/db.aspx?",
     }
 
     target_path = path or get_config_path()
@@ -118,3 +113,14 @@ def read_config(section: str | None = None) -> AppDataConfig:
 
     parser.read(config_path, encoding="utf-8")
     return AppDataConfig.from_parser(parser, section=section)
+
+
+def get_base_url(section: str | None = None) -> str:
+    """Return the configured base URL (convenience wrapper).
+
+    This central helper ensures other modules obtain the base URL from a
+    single place and always receive a non-null string.
+    """
+
+    cfg = read_config(section=section)
+    return cfg.url or ""

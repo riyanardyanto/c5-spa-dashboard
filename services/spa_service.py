@@ -11,7 +11,8 @@ from requests import Session
 from tabulate import tabulate
 
 from utils.auth import build_ntlm_auth
-from utils.constants import HEADERS, MAIN_URL
+from utils.constants import HEADERS
+from utils.app_config import get_base_url
 
 if TYPE_CHECKING:
     from utils.app_config import AppDataConfig
@@ -43,7 +44,10 @@ def get_url_period_loss_tree(
 
     """http://ots.app.pmi/db.aspx?table=SPA_NormPeriodLossTree&act=query&submit1=Search&db_Line=ID01-SE-CP-L021&db_FunctionalLocation=ID01-SE-CP-L021-MAKE&db_SegmentDateMin=2025-11-08&db_ShiftStart=&db_SegmentDateMax=&db_ShiftEnd=&db_Normalize=0&db_PeriodTime=10080&s_PeriodTime=&db_LongStopDetails=3&db_ReasonCNT=30&db_ReasonSort=stop+count&db_Language=OEM&db_LineFailureAnalysis=x"""
 
-    return MAIN_URL + urlencode(params, doseq=True)
+    # Read base URL from config.ini using centralized helper
+    base_url = get_base_url()
+
+    return base_url + urlencode(params, doseq=True)
 
 
 class SPADataFetcher:
@@ -74,18 +78,8 @@ class SPADataFetcher:
         active_session = session or self._session
 
         if active_session is not None:
-            response = active_session.get(
-                self.url,
-                headers=self._headers,
-                auth=self._auth,
-                allow_redirects=True,
-                timeout=30,
-            )
-            response.raise_for_status()
-            text = response.text
-        else:
-            with requests.Session() as temp_session:
-                response = temp_session.get(
+            try:
+                response = active_session.get(
                     self.url,
                     headers=self._headers,
                     auth=self._auth,
@@ -94,6 +88,31 @@ class SPADataFetcher:
                 )
                 response.raise_for_status()
                 text = response.text
+            except requests.exceptions.RequestException as exc:
+                # Provide a clearer, actionable error message for name resolution
+                raise RuntimeError(
+                    f"Failed to fetch URL '{self.url}': {exc}. "
+                    "Check network connectivity, DNS resolution for the host, "
+                    "VPN/proxy settings, and the configured base URL in config.ini."
+                ) from exc
+        else:
+            with requests.Session() as temp_session:
+                try:
+                    response = temp_session.get(
+                        self.url,
+                        headers=self._headers,
+                        auth=self._auth,
+                        allow_redirects=True,
+                        timeout=30,
+                    )
+                    response.raise_for_status()
+                    text = response.text
+                except requests.exceptions.RequestException as exc:
+                    raise RuntimeError(
+                        f"Failed to fetch URL '{self.url}': {exc}. "
+                        "Check network connectivity, DNS resolution for the host, "
+                        "VPN/proxy settings, and the configured base URL in config.ini."
+                    ) from exc
 
         self.raw_html = text
         return self.raw_html
