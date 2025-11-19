@@ -332,7 +332,7 @@ class DashboardView(ttk.Frame):
                     }"
                     + "`"
                 )
-                content = f"{header}\n{formatted_table}\n\n{content}"
+                content = f"{formatted_table}\n\n{content}"
 
         if hasattr(self, "report_view") and self.report_view.winfo_exists():
             report_window = self.report_view
@@ -341,7 +341,7 @@ class DashboardView(ttk.Frame):
             self.report_view = report_window
             report_window.transient(self.winfo_toplevel())
 
-        report_window.update_content(content)
+        report_window.update_content(f"{header}\n{content}")
         report_window.lift()
         report_window.focus_force()
 
