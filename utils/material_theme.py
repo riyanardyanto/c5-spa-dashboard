@@ -38,7 +38,7 @@ MATERIAL_PALETTE: Dict[str, str] = {
     "on_error": "#ffffff",
     # Warning
     "warning": "#ffc107",
-    "on_warning": "#000000",
+    "on_warning": "#535353",
     # Success
     "success": "#1D9F1D",
     "on_success": "#ffffff",
@@ -253,17 +253,20 @@ def apply_material_theme(window: ttk.Window) -> Dict[str, str]:
         configure_labelframe(variant)
 
     def configure_entry(variant: str | None) -> None:
+        # Use the variant color for lighter highlight/focus helpers when a variant
+        # is provided; fall back to the primary color for the default variant.
+        variant_color = palette[variant] if variant else palette["primary"]
         style.configure(
             _style_name("TEntry", variant),
             fieldbackground=palette["surface"],
             background=palette["surface"],
             foreground=palette["on_surface"],
             bordercolor=palette["outline_variant"],
-            lightcolor=palette["primary"],
+            lightcolor=variant_color,
             darkcolor=palette["outline"],
             insertcolor=palette["primary"],
             focusthickness=2,
-            focuscolor=palette["primary"],
+            focuscolor=variant_color,
         )
         style.map(
             _style_name("TEntry", variant),
@@ -274,7 +277,14 @@ def apply_material_theme(window: ttk.Window) -> Dict[str, str]:
             foreground=[("disabled", palette["on_surface_variant"])],
         )
 
-    for variant in (None, "primary", "success", "info", "warning"):
+    for variant in (
+        None,
+        "primary",
+        "success",
+        "info",
+        "warning",
+        "secondary",
+    ):
         configure_entry(variant)
 
     def configure_combobox(variant: str | None) -> None:

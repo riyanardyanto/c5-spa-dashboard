@@ -1,7 +1,7 @@
 import tkinter as tk
 import uuid
 from pathlib import Path
-from tkinter import Menu, messagebox
+from tkinter import Menu, messagebox, font as tkfont
 from typing import Dict, List, Optional
 
 import ttkbootstrap as ttk
@@ -184,6 +184,17 @@ class ActionItem(ttk.Frame):
             placeholder_color=self.palette.get("on_surface_variant", "#8A97AA"),
         )
         self.entry.grid(row=0, column=1, sticky="ew", pady=(2, 2))
+        # Make ActionItem.entry text italic to visually distinguish actions
+        try:
+            current_font = tkfont.Font(font=self.entry.cget("font"))
+        except Exception:
+            current_font = tkfont.nametofont("TkDefaultFont")
+        entry_italic = tkfont.Font(
+            family=current_font.cget("family"),
+            size=current_font.cget("size"),
+            slant="italic",
+        )
+        self.entry.configure(font=entry_italic)
 
         self.entry.bind("<Button-3>", self.show_context_menu)
         self.context_menu = Menu(self, tearoff=0)
@@ -242,7 +253,7 @@ class DetailItem(ttk.Frame):
         )
         self.index_chip.pack(side="left")
 
-        self.textbox = ttk.Entry(header, bootstyle="warning")
+        self.textbox = ttk.Entry(header, bootstyle="primary")
         setup_entry_placeholder(
             self.textbox,
             "Masukkan detail...",
@@ -254,7 +265,7 @@ class DetailItem(ttk.Frame):
 
         self.add_action_btn = ttk.Button(
             header,
-            bootstyle="warning",
+            bootstyle="primary",
             width=3,
             command=self.add_action,
         )
@@ -352,7 +363,7 @@ class IssueCard(ttk.Frame):
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
 
-        self.issue_entry = ttk.Entry(header, bootstyle="primary")
+        self.issue_entry = ttk.Entry(header, bootstyle="warning")
         setup_entry_placeholder(
             self.issue_entry,
             "Masukkan issue...",
@@ -360,10 +371,21 @@ class IssueCard(ttk.Frame):
             placeholder_color=self.palette.get("on_surface_variant", "#85878B"),
         )
         self.issue_entry.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        # Make issue_entry text bold for emphasis
+        try:
+            current_font = tkfont.Font(font=self.issue_entry.cget("font"))
+        except Exception:
+            current_font = tkfont.nametofont("TkDefaultFont")
+        bold_font = tkfont.Font(
+            family=current_font.cget("family"),
+            size=current_font.cget("size"),
+            weight="bold",
+        )
+        self.issue_entry.configure(font=bold_font)
 
         self.add_detail_btn = ttk.Button(
             header,
-            bootstyle="primary",
+            bootstyle="warning",
             width=3,
             command=self.add_detail_item,
         )
