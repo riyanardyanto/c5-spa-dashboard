@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from requests_ntlm2 import HttpNtlmAuth
+from httpx_ntlm import HttpNtlmAuth
 
 from .app_config import AppDataConfig
 

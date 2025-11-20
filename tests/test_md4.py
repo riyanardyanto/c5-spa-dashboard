@@ -1,7 +1,14 @@
 import hashlib
+import pytest
 
-# Ensure the patched module is imported for its side effects (registers md4)
-import utils.patched_hashlib  # noqa: F401
+# The project's MD4 fallback (utils.patched_hashlib) has been removed.
+# These tests are still useful to validate that the running Python
+# interpreter provides MD4 support; if not present the tests are
+# skipped.
+if not hasattr(hashlib, "md4"):
+    pytest.skip(
+        "hashlib.md4 not available in this Python build", allow_module_level=True
+    )
 
 
 def test_md4_new_digest():

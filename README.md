@@ -29,7 +29,7 @@ To create a standalone executable file:
 2. **Build the executable**
 
 ```powershell
-uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "hooks;hooks" --add-data "dashboard_view.py;." main.py
+uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "dashboard_view.py;." main.py
 ```
 
 Or use the generated spec file for faster rebuild:
@@ -68,112 +68,132 @@ uv run pyinstaller SPA-Dashboard.spec
 - **Edit targets**
   - `Target Editor` lets you adjust per-shift target values stored alongside the SPA data. Save changes before closing.
 
-## MD4 fallback (ntlm / SPA auth compatibility)
+## Notes on MD4 and NTLM
 
-Starting from this commit the application includes a safe runtime fallback
-for the MD4 hash algorithm used by some NTLM libraries. This solves the
-ValueError "unsupported hash type md4" that can occur on Python builds
-where OpenSSL does not expose MD4.
+The repository previously included an MD4 compatibility shim (`utils/patched_hashlib.py`) and
+an associated PyInstaller runtime hook. That fallback has been removed.
 
-What changed
+If your environment needs MD4 for NTLM authentication, please ensure your
+Python build provides MD4 support or install a library such as
+`pycryptodome` and add a direct import in your build/run environment as needed.
 
-`main.py`. It ensures `hashlib.new('md4', ...)` and `hashlib.md4(...)`
-are available at runtime. If the system has `pycryptodome` installed,
-that implementation is preferred; otherwise a compact pure-Python MD4
-implementation is used as a fallback.
+## SSL verification & self-signed certificates
 
-Why this helps
+If your SPA server is using a self-signed certificate or a private CA, the
+HTTP client will fail with an SSL verification error unless you configure
+verification appropriately. You can control SSL verification through
+the `config.ini` options:
 
-call `hashlib.new('md4', ...)`. If your Python/OpenSSL does not support
-MD4, those calls raise a ValueError and the app fails when fetching
-SPA data. The fallback restores compatibility without requiring a
-system-level OpenSSL rebuild.
+- `verify_ssl` — set to `True` (default) to verify certificate chains, or
+  `False` to disable verification (less secure; use with caution).
+- `ca_bundle` — optional path to a PEM file containing CA certificates to
+  trust. If present, this file will be used in preference to `verify_ssl`.
 
-Optional: prefer a compiled implementation
+Example `config.ini`:
 
-MD4 implementation and better performance. On Windows `pycryptodomex`
-may attempt to build C extensions and require the Microsoft C++ Build
-Tools (Visual C++ 14.0+). If you want the compiled implementation,
-either install a wheel or install the build tools:
-
-```powershell
-# Install the pure-Python-friendly package (wheels available)
-.\.venv\Scripts\Activate.ps1
-python -m pip install pycryptodome
-
-# Or, to build pycryptodomex from source on Windows you'll need the
-# Visual C++ Build Tools. Download and install them from:
-# https://visualstudio.microsoft.com/visual-cpp-build-tools/
+```ini
+[DEFAULT]
+environment = development
+username = your_username
+password = your_password
+link_up = LU18,LU21,LU26,LU27
+url = https://ots.spappa.aws.private-pmideep.biz/db.aspx?
+verify_ssl = False
+ca_bundle =
 ```
 
-Testing the MD4 support
+Notes:
+- It is better to configure a `ca_bundle` (PEM file) referencing a trusted
+  CA than disabling verification entirely. Only set `verify_ssl` to `False`
+  for development/testing or when you fully understand the security risks.
 
-Run the tests in the project's venv:
+## HTTP client migration & async usage
+
+This project migrated from `requests` and `requests-ntlm2` to the
+`httpx` and `httpx-ntlm` client libraries. The `services.spa_service` module
+uses `httpx.AsyncClient` for network I/O and exposes both synchronous and
+asynchronous processing APIs:
+
+- `SPADataProcessor.process()` — synchronous, blocking API (backwards compatible)
+- `SPADataProcessor.process_async()` — asynchronous API. Use this in async
+  contexts (e.g., GUI event loop) to avoid blocking the main thread.
+
+Notes & examples
+- If you rely on session reuse, pass a shared `httpx.AsyncClient` instance as
+  the `session` parameter and call `process_async(session=...)` to reduce
+  connection overhead.
+- `httpx` uses `follow_redirects` instead of `allow_redirects`; when updating
+  code from `requests`, replace `allow_redirects` with `follow_redirects` and
+  handle `httpx.HTTPError` exceptions instead of `requests.exceptions`.
+
+Async usage (recommended for GUI apps):
+
+```python
+from httpx import AsyncClient
+from services.spa_service import SPADataProcessor
+
+async with AsyncClient() as client:
+    processor = SPADataProcessor(url, config=config, session=client)
+    processed = await processor.process_async(session=client)
+```
+
+Synchronous usage (scripts, tests):
+
+```python
+processor = SPADataProcessor(url, config=config)
+processed = processor.process()
+```
+
+If you prefer to keep `requests` in other scripts or tooling, note the API
+differences: `requests.Session` -> `httpx.Client` (sync) or
+`httpx.AsyncClient` (async). Adjust your imports and error handling accordingly.
+
+### Downgrade to Python 3.12 (Windows)
+
+If you need to run the project with Python 3.12, follow these instructions to remove the existing venv and create a new one using Python 3.12.
+
+1) Install Python 3.12
+
+- Option A — Winget (recommended on Windows 10/11):
 
 ```powershell
+winget install --id Python.Python.3.12 -e --source winget
+```
+
+- Option B — Download from python.org
+
+  Download the official Python 3.12 installer from https://www.python.org/downloads/release/python-312/ and run it. Make sure to check "Add Python to PATH" and choose the x86/x64 installer that matches your system.
+
+2) Create / recreate the project's venv
+
+```powershell
+# Delete previous virtual environment (if any)
+If (Test-Path -Path .\.venv) { Remove-Item -Recurse -Force .\.venv }
+
+# Create a new venv using the Python 3.12 executable (adjust path if needed)
+C:\Path\To\Python312\python.exe -m venv .venv
+
+# Activate
+.\.venv\Scripts\Activate.ps1
+
+# Upgrade pip and reinstall dependencies
+python -m pip install --upgrade pip
+python -m pip install async-tkinter-loop customtkinter lxml openpyxl pandas qrcode httpx httpx-ntlm tabulate ttkbootstrap ttkwidgets
+
+# Install dev dependencies
+python -m pip install pyinstaller pytest
+```
+
+3) Verify and run tests
+
+```powershell
+# Activate the venv if not already
 .\.venv\Scripts\Activate.ps1
 python -m pytest -q
 ```
 
-If you prefer not to install compiled crypto libraries, the fallback
-remains in place and the application will continue to function correctly
-— at lower performance for MD4-heavy workloads.
+Notes:
 
-PyInstaller runtime hook (included)
-
-- This repository includes a PyInstaller runtime hook at `hooks/runtime_hook_patched_hashlib.py`.
-  The hook ensures the patched MD4 implementation is loaded early in frozen
-  builds so that extensions or libraries which call `hashlib.new('md4', ...)`
-  succeed at runtime.
-
-- Usage:
-
-  - When building with PyInstaller from the command line, pass the hook with
-    the `--runtime-hook` option. Example:
-
-  uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "hooks;hooks" --add-data "dashboard_view.py;." --runtime-hook hooks/runtime_hook_patched_hashlib.py main.py
-
-  - If you prefer using a spec file, add the hook path to the `Analysis` as
-    `runtime_hooks`: e.g.
-
-    Analysis(
-    [...],
-    runtime_hooks=['hooks/runtime_hook_patched_hashlib.py'],
-    [...]
-    )
-
-  Why this helps:
-
-  - In a frozen application imports and module initialization happen in a
-    different order and earlier than when running from source. The runtime
-    hook forces the patched MD4 shim to be loaded before other modules that
-    might request MD4, avoiding `ValueError: unsupported hash type md4` in
-    the frozen executable.
-
-  - The hook is low-risk: it only ensures the same fallback behavior that's
-    used when running from source via `utils/patched_hashlib.py`.
-
-Hook debug & log location
-
-- The runtime hook supports optional diagnostic logging controlled by the
-  environment variable `PATCHED_HASHLIB_HOOK_DEBUG`. When set to a truthy
-  value (`1`, `true`, `yes`, `y`) the hook emits a small diagnostic file
-  named `patched_hook_run.txt`.
-
-- Where the file is written:
-
-  - When running from source the hook will try to create and write to
-    `logs/patched_hook_run.txt` in the project root.
-  - When running a frozen executable the hook will try to write to
-    `logs/patched_hook_run.txt` next to the executable.
-  - If those locations are not writable the hook falls back to the system
-    temporary directory.
-
-- Example (PowerShell): enable debug and build/run so the hook writes logs:
-
-```powershell
-$env:PATCHED_HASHLIB_HOOK_DEBUG='1'; uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "hooks;hooks" --add-data "dashboard_view.py;." --runtime-hook hooks/runtime_hook_patched_hashlib.py main.py
-```
-
-After running, inspect `logs/patched_hook_run.txt` next to the project or
-executable; if it's not present check the system temp directory.
+- If your system already has multiple Python versions, prefer using the full path to the 3.12 interpreter when creating the venv (C:\Python312\python.exe -m venv .venv).
+- If any package requires Python >=3.13 or 3.14, you may encounter incompatibility errors; check test failures and package release notes, and pin compatible versions if needed.
+- For `pyproject.toml`, this project now declares `requires-python = ">=3.12,<3.13"`. If you'd prefer a wider range (e.g., ">=3.12"), adjust accordingly.

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from io import StringIO
+from pathlib import Path
+import sys
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode
+from typing import Union
+from urllib.parse import urlencode, urlparse
+import ssl
 
 import numpy as np
 import pandas as pd
-import requests
-from requests import Session
+import httpx
+from httpx import Client, AsyncClient
 from tabulate import tabulate
 
 from utils.auth import build_ntlm_auth
@@ -42,7 +46,7 @@ def get_url_period_loss_tree(
         "db_LineFailureAnalysis": "x",
     }
 
-    """http://ots.app.pmi/db.aspx?table=SPA_NormPeriodLossTree&act=query&submit1=Search&db_Line=ID01-SE-CP-L021&db_FunctionalLocation=ID01-SE-CP-L021-MAKE&db_SegmentDateMin=2025-11-08&db_ShiftStart=&db_SegmentDateMax=&db_ShiftEnd=&db_Normalize=0&db_PeriodTime=10080&s_PeriodTime=&db_LongStopDetails=3&db_ReasonCNT=30&db_ReasonSort=stop+count&db_Language=OEM&db_LineFailureAnalysis=x"""
+    """http://ots.spappa.aws.private-pmideep.biz/db.aspx?table=SPA_NormPeriodLossTree&act=query&submit1=Search&db_Line=ID01-SE-CP-L021&db_FunctionalLocation=ID01-SE-CP-L021-MAKE&db_SegmentDateMin=2025-11-08&db_ShiftStart=&db_SegmentDateMax=&db_ShiftEnd=&db_Normalize=0&db_PeriodTime=10080&s_PeriodTime=&db_LongStopDetails=3&db_ReasonCNT=30&db_ReasonSort=stop+count&db_Language=OEM&db_LineFailureAnalysis=x"""
 
     # Read base URL from config.ini using centralized helper
     base_url = get_base_url()
@@ -60,7 +64,7 @@ class SPADataFetcher:
         headers: dict[str, str] | None = None,
         auth=None,
         config: AppDataConfig | None = None,
-        session: Session | None = None,
+        session: Union[Client, AsyncClient] | None = None,
     ) -> None:
         self.url = url
         self.raw_html: str | None = None
@@ -68,8 +72,42 @@ class SPADataFetcher:
         self._auth = auth if auth is not None else build_ntlm_auth(config)
         self._session = session
         self._config = config
+        # SSL verification behavior: default to True unless config disables it
+        if config is not None:
+            try:
+                self._verify_ssl = getattr(config, "verify_ssl", True)
+                self._ca_bundle = getattr(config, "ca_bundle", None)
+            except Exception:
+                self._verify_ssl = True
+                self._ca_bundle = None
+        else:
+            self._verify_ssl = True
+            self._ca_bundle = None
 
-    def fetch(self, session: Session | None = None) -> str:
+        self._ensure_ca_bundle()
+
+    def _ensure_ca_bundle(self) -> None:
+        if self._ca_bundle is not None or not self._verify_ssl:
+            return
+        try:
+            parsed = urlparse(self.url)
+            host = parsed.hostname
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            cert = ssl.get_server_certificate((host, port))
+            base_path = (
+                Path(sys.executable).parent
+                if getattr(sys, "frozen", False)
+                else Path(__file__).resolve().parent.parent
+            )
+            cert_path = base_path / "server_cert.pem"
+            with open(cert_path, "w") as f:
+                f.write(cert)
+            self._ca_bundle = str(cert_path)
+        except Exception:
+            # If failed, leave as None, will use verify_ssl
+            pass
+
+    def fetch(self, session: Client | None = None) -> str:
         """Fetch HTML content from the URL synchronously."""
 
         if self.raw_html is not None:
@@ -83,12 +121,12 @@ class SPADataFetcher:
                     self.url,
                     headers=self._headers,
                     auth=self._auth,
-                    allow_redirects=True,
+                    follow_redirects=True,
                     timeout=30,
                 )
                 response.raise_for_status()
                 text = response.text
-            except requests.exceptions.RequestException as exc:
+            except httpx.HTTPError as exc:
                 # Provide a clearer, actionable error message for name resolution
                 raise RuntimeError(
                     f"Failed to fetch URL '{self.url}': {exc}. "
@@ -96,18 +134,70 @@ class SPADataFetcher:
                     "VPN/proxy settings, and the configured base URL in config.ini."
                 ) from exc
         else:
-            with requests.Session() as temp_session:
+            # Prepare verify value for httpx (bool or str to path of ca bundle)
+            verify_value = self._ca_bundle if self._ca_bundle else self._verify_ssl
+            with httpx.Client(verify=verify_value) as temp_session:
                 try:
                     response = temp_session.get(
                         self.url,
                         headers=self._headers,
                         auth=self._auth,
-                        allow_redirects=True,
+                        follow_redirects=True,
                         timeout=30,
                     )
                     response.raise_for_status()
                     text = response.text
-                except requests.exceptions.RequestException as exc:
+                except httpx.HTTPError as exc:
+                    raise RuntimeError(
+                        f"Failed to fetch URL '{self.url}': {exc}. "
+                        "Check network connectivity, DNS resolution for the host, "
+                        "VPN/proxy settings, and the configured base URL in config.ini."
+                    ) from exc
+
+        self.raw_html = text
+        return self.raw_html
+
+    async def fetch_async(self, session: AsyncClient | None = None) -> str:
+        """Fetch HTML content from the URL asynchronously."""
+
+        if self.raw_html is not None:
+            return self.raw_html
+
+        active_session = session or (
+            self._session if isinstance(self._session, AsyncClient) else None
+        )
+
+        if active_session is not None:
+            try:
+                response = await active_session.get(
+                    self.url,
+                    headers=self._headers,
+                    auth=self._auth,
+                    follow_redirects=True,
+                    timeout=30,
+                )
+                response.raise_for_status()
+                text = response.text
+            except httpx.HTTPError as exc:
+                raise RuntimeError(
+                    f"Failed to fetch URL '{self.url}': {exc}. "
+                    "Check network connectivity, DNS resolution for the host, "
+                    "VPN/proxy settings, and the configured base URL in config.ini."
+                ) from exc
+        else:
+            verify_value = self._ca_bundle if self._ca_bundle else self._verify_ssl
+            async with httpx.AsyncClient(verify=verify_value) as temp_session:
+                try:
+                    response = await temp_session.get(
+                        self.url,
+                        headers=self._headers,
+                        auth=self._auth,
+                        follow_redirects=True,
+                        timeout=30,
+                    )
+                    response.raise_for_status()
+                    text = response.text
+                except httpx.HTTPError as exc:
                     raise RuntimeError(
                         f"Failed to fetch URL '{self.url}': {exc}. "
                         "Check network connectivity, DNS resolution for the host, "
@@ -250,7 +340,7 @@ class SPADataProcessor:
         headers: dict[str, str] | None = None,
         auth=None,
         config: AppDataConfig | None = None,
-        session: Session | None = None,
+        session: Union[Client, AsyncClient] | None = None,
     ) -> None:
         self._source = url
         self._is_html = is_html
@@ -276,7 +366,7 @@ class SPADataProcessor:
     def process(
         self,
         *,
-        session: Session | None = None,
+        session: Union[Client, AsyncClient] | None = None,
         force: bool = False,
     ) -> dict[str, pd.DataFrame]:
         """Execute the full data processing pipeline synchronously."""
@@ -294,7 +384,17 @@ class SPADataProcessor:
                     session=self._session,
                 )
             self.raw_html = self.fetcher.fetch(session=session)
+        # Perform the cpu-bound parsing and processing synchronously
+        self._compute_processed_data()
 
+        return self.processed_data
+
+    def _compute_processed_data(self) -> dict[str, pd.DataFrame]:
+        """Synchronous processing of raw HTML into DataFrames.
+
+        This method is CPU-bound and intentionally synchronous; callers that wish
+        to avoid blocking the event loop should run it in a background thread.
+        """
         extractor = HTMLTableExtractor(self.raw_html)
         self.tables = extractor.extract()
 
@@ -305,7 +405,34 @@ class SPADataProcessor:
             "data_losses": DataLossesTableProcessor(self.splitted_tables).process(),
             "stops_reason": StopReasonTableProcessor(self.splitted_tables).process(),
         }
+        return self.processed_data
 
+    async def process_async(
+        self,
+        *,
+        session: AsyncClient | None = None,
+        force: bool = False,
+    ) -> dict[str, pd.DataFrame]:
+        """Execute the full data processing pipeline asynchronously."""
+
+        if self.processed_data and not force:
+            return self.processed_data
+
+        if self.raw_html is None:
+            if self.fetcher is None:
+                self.fetcher = SPADataFetcher(
+                    self._source,
+                    headers=self._headers,
+                    auth=self._auth,
+                    config=self._config,
+                    session=self._session,
+                )
+            self.raw_html = await self.fetcher.fetch_async(session=session)
+
+        import asyncio as _asyncio
+
+        # Offload blocking parsing and DataFrame processing to a worker thread
+        await _asyncio.to_thread(self._compute_processed_data)
         return self.processed_data
 
     def save_results(self, output_format: str = "psql") -> None:

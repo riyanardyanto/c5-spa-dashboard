@@ -21,6 +21,8 @@ class AppDataConfig:
     password: str
     link_up: Tuple[str, ...]
     url: str
+    verify_ssl: bool = True
+    ca_bundle: str | None = None
 
     @classmethod
     def from_parser(
@@ -42,6 +44,8 @@ class AppDataConfig:
         password = get(section_name, "password", fallback="")
         link_up_raw = get(section_name, "link_up", fallback="")
         url = get(section_name, "url", fallback="")
+        verify_ssl = parser.getboolean(section_name, "verify_ssl", fallback=True)
+        ca_bundle = get(section_name, "ca_bundle", fallback=None) or None
 
         link_up = cls._normalize_links(link_up_raw)
 
@@ -51,6 +55,8 @@ class AppDataConfig:
             password=password.strip(),
             link_up=link_up,
             url=url.strip(),
+            verify_ssl=verify_ssl,
+            ca_bundle=ca_bundle,
         )
 
     @staticmethod
@@ -67,6 +73,8 @@ class AppDataConfig:
             "password": self.password,
             "link_up": self.link_up,
             "url": self.url,
+            "verify_ssl": self.verify_ssl,
+            "ca_bundle": self.ca_bundle,
         }
 
 
@@ -88,11 +96,16 @@ def create_config(path: Path | None = None) -> Path:
     config = ConfigParser()
     link_up = ["LU18", "LU21", "LU26", "LU27"]
     config["DEFAULT"] = {
-        "environment": "development",
-        "username": "your_username",
-        "password": "your_password",
+        "environment": "production",
+        "username": "",
+        "password": "",
         "link_up": ",".join(link_up),
         "url": "https://ots.spappa.aws.private-pmideep.biz/db.aspx?",
+        # If you are using self-signed certificates or a private CA,
+        # set `verify_ssl` to False or provide `ca_bundle` with a path
+        # to a PEM file containing your certificate(s).
+        "verify_ssl": "True",
+        "ca_bundle": "",
     }
 
     target_path = path or get_config_path()

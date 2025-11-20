@@ -189,7 +189,7 @@ class DashboardView(ttk.Frame):
                 # SPADataProcessor.process performs network IO and heavy parsing
                 # which are blocking; run it on a thread to keep the Tk event loop
                 processor = SPADataProcessor(url=url, config=self.data_config)
-                processed = await asyncio.to_thread(processor.process)
+                processed = await processor.process_async()
             except Exception as exc:  # noqa: BLE001 - propagate via UI and log
                 log_exception("Gagal memproses data dari SPA", exc)
                 messagebox.showerror(
