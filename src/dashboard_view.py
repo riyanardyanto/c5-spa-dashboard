@@ -423,7 +423,7 @@ class DashboardView(ttk.Frame):
             )
 
         if env_value == "development":
-            return "http://127.0.0.1:5501/assets/spa3.html"
+            return "http://127.0.0.1:5501/assets/response.html"
 
         if env_value == "test":
             candidate = ""

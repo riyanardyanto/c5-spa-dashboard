@@ -17,6 +17,7 @@ from tabulate import tabulate
 from src.utils.auth import build_ntlm_auth
 from src.utils.constants import HEADERS
 from src.utils.app_config import get_base_url
+from src.utils.helpers import get_script_folder
 
 if TYPE_CHECKING:
     from src.utils.app_config import AppDataConfig
@@ -128,8 +129,13 @@ class SPADataFetcher:
                 text = response.text
             except httpx.HTTPError as exc:
                 # Provide a clearer, actionable error message for name resolution
+                status_code = (
+                    getattr(exc.response, "status_code", "unknown")
+                    if hasattr(exc, "response")
+                    else "unknown"
+                )
                 raise RuntimeError(
-                    f"Failed to fetch URL '{self.url}': {exc}. "
+                    f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
                     "Check network connectivity, DNS resolution for the host, "
                     "VPN/proxy settings, and the configured base URL in config.ini."
                 ) from exc
@@ -148,8 +154,13 @@ class SPADataFetcher:
                     response.raise_for_status()
                     text = response.text
                 except httpx.HTTPError as exc:
+                    status_code = (
+                        getattr(exc.response, "status_code", "unknown")
+                        if hasattr(exc, "response")
+                        else "unknown"
+                    )
                     raise RuntimeError(
-                        f"Failed to fetch URL '{self.url}': {exc}. "
+                        f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
                         "Check network connectivity, DNS resolution for the host, "
                         "VPN/proxy settings, and the configured base URL in config.ini."
                     ) from exc
@@ -179,8 +190,14 @@ class SPADataFetcher:
                 response.raise_for_status()
                 text = response.text
             except httpx.HTTPError as exc:
+                # Provide a clearer, actionable error message for name resolution
+                status_code = (
+                    getattr(exc.response, "status_code", "unknown")
+                    if hasattr(exc, "response")
+                    else "unknown"
+                )
                 raise RuntimeError(
-                    f"Failed to fetch URL '{self.url}': {exc}. "
+                    f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
                     "Check network connectivity, DNS resolution for the host, "
                     "VPN/proxy settings, and the configured base URL in config.ini."
                 ) from exc
@@ -198,11 +215,20 @@ class SPADataFetcher:
                     response.raise_for_status()
                     text = response.text
                 except httpx.HTTPError as exc:
+                    status_code = (
+                        getattr(exc.response, "status_code", "unknown")
+                        if hasattr(exc, "response")
+                        else "unknown"
+                    )
                     raise RuntimeError(
-                        f"Failed to fetch URL '{self.url}': {exc}. "
+                        f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
                         "Check network connectivity, DNS resolution for the host, "
                         "VPN/proxy settings, and the configured base URL in config.ini."
                     ) from exc
+
+        response_path = Path(get_script_folder()) / "data" / "response.html"
+        with open(response_path, "w", encoding="utf-8") as f:
+            f.write(text)
 
         self.raw_html = text
         return self.raw_html
@@ -221,11 +247,9 @@ class HTMLTableExtractor:
         if not tables:
             raise ValueError("No tables found in the HTML content.")
 
-        # Replace empty strings and &nbsp-like values with np.nan in all tables
+        # Replace empty strings with NaN, '&nbsp;' with "", and '&nbsp' with NaN
         self.tables = [
-            table.replace({"": np.nan}).replace(
-                to_replace=r".*&nbsp.*", value=np.nan, regex=True
-            )
+            table.replace({"": np.nan, "&nbsp;": "", "&nbsp": np.nan})
             for table in tables
         ]
         return self.tables
@@ -293,7 +317,7 @@ class StopReasonTableProcessor:
 
     def process(self) -> pd.DataFrame:
         """Get and process the stops reason table from splitted tables."""
-        table = self.splitted_tables[3]
+        table = self.splitted_tables[3].iloc[1:]
         cleaned = table.dropna(how="all")
         stops_reason = (
             cleaned.loc[cleaned[4].notna(), [1, 9, 2, 4]]

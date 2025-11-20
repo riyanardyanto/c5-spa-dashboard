@@ -29,13 +29,13 @@ To create a standalone executable file:
 2. **Build the executable**
 
 ```powershell
-uv run pyinstaller --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "components;components" --add-data "services;services" --add-data "utils;utils" --add-data "dashboard_view.py;." main.py
+uv run pyinstaller --clean --onefile --name "SPA-Dashboard" --windowed --icon "assets/c5_spa.ico" --add-data "assets;assets" --add-data "src;src" main.py
 ```
 
 Or use the generated spec file for faster rebuild:
 
 ```powershell
-uv run pyinstaller SPA-Dashboard.spec
+uv run pyinstaller --clean SPA-Dashboard.spec
 ```
 
 3. **Find the executable**
