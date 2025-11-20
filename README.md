@@ -89,6 +89,12 @@ the `config.ini` options:
 - `ca_bundle` — optional path to a PEM file containing CA certificates to
   trust. If present, this file will be used in preference to `verify_ssl`.
 
+**Automatic certificate download**: If `verify_ssl = True` and `ca_bundle` is not set,
+the application will automatically download the server's certificate on first use
+and save it as `server_cert.pem` in the application folder (or exe directory for
+compiled executables). This provides secure SSL verification without manual
+certificate management.
+
 Example `config.ini`:
 
 ```ini
@@ -98,14 +104,15 @@ username = your_username
 password = your_password
 link_up = LU18,LU21,LU26,LU27
 url = https://ots.spappa.aws.private-pmideep.biz/db.aspx?
-verify_ssl = False
-ca_bundle =
+verify_ssl = True  # Default: enables auto-download if ca_bundle not set
+ca_bundle =  # Leave blank for auto-download
 ```
 
 Notes:
 - It is better to configure a `ca_bundle` (PEM file) referencing a trusted
   CA than disabling verification entirely. Only set `verify_ssl` to `False`
   for development/testing or when you fully understand the security risks.
+- The auto-downloaded certificate is cached locally for subsequent runs.
 
 ## HTTP client migration & async usage
 
