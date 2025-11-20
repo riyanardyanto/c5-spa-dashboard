@@ -9,7 +9,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from utils.csvhandle import get_database_file_path
+from src.utils.csvhandle import get_database_file_path
 
 
 @dataclass

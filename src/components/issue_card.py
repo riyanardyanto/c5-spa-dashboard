@@ -10,9 +10,9 @@ from PIL import Image, ImageTk, UnidentifiedImageError
 from ttkbootstrap.scrolled import ScrolledFrame
 from ttkbootstrap.tooltip import ToolTip
 
-from services.logging_service import log_exception, log_warning
-from utils.helpers import resource_path
-from utils.material_theme import MATERIAL_PALETTE
+from src.services.logging_service import log_exception, log_warning
+from src.utils.helpers import resource_path
+from src.utils.material_theme import MATERIAL_PALETTE
 
 
 _ACTION_ICON: Optional[ImageTk.PhotoImage] = None

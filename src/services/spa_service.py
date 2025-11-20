@@ -14,12 +14,12 @@ import httpx
 from httpx import Client, AsyncClient
 from tabulate import tabulate
 
-from utils.auth import build_ntlm_auth
-from utils.constants import HEADERS
-from utils.app_config import get_base_url
+from src.utils.auth import build_ntlm_auth
+from src.utils.constants import HEADERS
+from src.utils.app_config import get_base_url
 
 if TYPE_CHECKING:
-    from utils.app_config import AppDataConfig
+    from src.utils.app_config import AppDataConfig
 
 
 def get_url_period_loss_tree(

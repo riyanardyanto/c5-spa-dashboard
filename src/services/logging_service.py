@@ -8,7 +8,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
-from utils.helpers import get_script_folder
+from src.utils.helpers import get_script_folder
 
 
 LOG_FILENAME = "app_errors.log"

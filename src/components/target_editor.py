@@ -5,7 +5,7 @@ from ttkbootstrap.constants import BOTH, EW, NSEW, X
 from ttkbootstrap.tooltip import ToolTip
 
 from .editble_tableview import EditableTableView
-from utils.csvhandle import load_targets_df
+from src.utils.csvhandle import load_targets_df
 
 
 class TargetEditor(ttk.Toplevel):

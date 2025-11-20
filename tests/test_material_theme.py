@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from utils import material_theme
+from src.utils import material_theme
 
 
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")

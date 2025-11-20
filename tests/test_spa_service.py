@@ -1,5 +1,5 @@
-from utils.app_config import AppDataConfig
-import services.spa_service as spa_service
+from src.utils.app_config import AppDataConfig
+import src.services.spa_service as spa_service
 import pandas as pd
 import asyncio
 
@@ -41,7 +41,7 @@ def test_process_async_with_local_html():
 
 
 def test_ssl_configurations_are_read():
-    from utils.app_config import AppDataConfig
+    from src.utils.app_config import AppDataConfig
 
     cfg = AppDataConfig(
         environment="dev",
@@ -53,7 +53,7 @@ def test_ssl_configurations_are_read():
         ca_bundle=None,
     )
 
-    from services.spa_service import SPADataFetcher
+    from src.services.spa_service import SPADataFetcher
 
     fetcher = SPADataFetcher(url="http://example/", config=cfg)
     assert fetcher._verify_ssl is False

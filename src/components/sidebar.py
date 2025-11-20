@@ -6,7 +6,7 @@ from ttkbootstrap.constants import SUCCESS, W, X
 from ttkbootstrap.tooltip import ToolTip
 from ttkwidgets.autocomplete import AutocompleteCombobox
 
-from utils.helpers import resource_path
+from src.utils.helpers import resource_path
 
 
 class Sidebar(ttk.Frame):

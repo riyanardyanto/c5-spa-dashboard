@@ -2,7 +2,7 @@ import pandas as pd
 import ttkbootstrap as ttk
 from ttkbootstrap.tableview import Tableview
 
-from utils.csvhandle import get_database_file_path
+from src.utils.csvhandle import get_database_file_path
 
 
 class HistoryWindow(ttk.Toplevel):

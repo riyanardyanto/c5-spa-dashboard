@@ -10,18 +10,18 @@ import ttkbootstrap as ttk
 import pandas as pd
 from tabulate import tabulate
 
-from components.header_frame import HeaderFrame
-from components.issue_card import IssueCardFrame
-from components.manual_window import ManualWindow
-from components.report_toplevel import ReportView
-from components.sidebar import Sidebar
-from components.table_frame import TableFrame
-from services.logging_service import log_exception
-from services.record_service import append_cards_to_csv, build_record_rows
-from services.spa_service import SPADataProcessor, get_url_period_loss_tree
-from utils.app_config import AppDataConfig
-from utils.csvhandle import get_targets_file_path, save_user
-from utils.csvhandle import load_users
+from src.components.header_frame import HeaderFrame
+from src.components.issue_card import IssueCardFrame
+from src.components.manual_window import ManualWindow
+from src.components.report_toplevel import ReportView
+from src.components.sidebar import Sidebar
+from src.components.table_frame import TableFrame
+from src.services.logging_service import log_exception
+from src.services.record_service import append_cards_to_csv, build_record_rows
+from src.services.spa_service import SPADataProcessor, get_url_period_loss_tree
+from src.utils.app_config import AppDataConfig
+from src.utils.csvhandle import get_targets_file_path, save_user
+from src.utils.csvhandle import load_users
 from async_tkinter_loop import async_handler
 import asyncio
 
@@ -347,7 +347,7 @@ class DashboardView(ttk.Frame):
 
     def show_target_editor(self) -> None:
         """Open the target editor window."""
-        from components.target_editor import TargetEditor
+        from src.components.target_editor import TargetEditor
 
         lu = self.sidebar.lu.get().strip("LU")
         func_location = self.sidebar.func_location.get()[:4].strip().lower()
@@ -360,7 +360,7 @@ class DashboardView(ttk.Frame):
 
     def show_history(self) -> None:
         """Open the history viewer window."""
-        from components.history_window import HistoryWindow
+        from src.components.history_window import HistoryWindow
 
         history_window = HistoryWindow(self.winfo_toplevel())
         history_window.transient(self.winfo_toplevel())

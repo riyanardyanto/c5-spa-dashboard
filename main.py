@@ -1,14 +1,14 @@
 import ttkbootstrap as ttk
 
-from dashboard_view import DashboardView
-from services.logging_service import (
+from src.dashboard_view import DashboardView
+from src.services.logging_service import (
     install_global_exception_handler,
     log_exception,
     log_warning,
 )
-from utils.app_config import read_config
-from utils.material_theme import apply_material_theme
-from utils.helpers import resource_path
+from src.utils.app_config import read_config
+from src.utils.material_theme import apply_material_theme
+from src.utils.helpers import resource_path
 from async_tkinter_loop import async_mainloop
 
 

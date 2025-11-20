@@ -7,7 +7,7 @@ from typing import Dict, Iterable
 import ttkbootstrap as ttk
 from tkinter import Misc, font as tkfont
 
-from services.logging_service import log_warning
+from src.services.logging_service import log_warning
 
 MATERIAL_PALETTE: Dict[str, str] = {
     # Primary and related
