@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Tuple
 
 from configparser import ConfigParser
+
+from src.utils.helpers import get_script_folder, resource_path
 
 CONFIG_FILENAME = "config.ini"
 
@@ -78,16 +79,10 @@ class AppDataConfig:
         }
 
 
-def _resolve_base_path() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(sys.modules["__main__"].__file__).resolve().parent
-
-
 def get_config_path() -> Path:
     """Return the absolute path to the application configuration file."""
 
-    return _resolve_base_path() / "config" / CONFIG_FILENAME
+    return Path(get_script_folder()) / "config" / CONFIG_FILENAME
 
 
 def create_config(path: Path | None = None) -> Path:
@@ -119,7 +114,7 @@ def create_config(path: Path | None = None) -> Path:
 def generate_ca_bundle(bundle_path: Path) -> None:
     """Generate the CA bundle file from certificate assets."""
 
-    assets_path = _resolve_base_path() / "assets"
+    assets_path = Path(resource_path("assets"))
     sub_ca_path = assets_path / "PMI Sub CA v3.crt"
     aws_ca_path = assets_path / "PMI AWS CA v3.crt"
 
@@ -146,9 +141,9 @@ def read_config(section: str | None = None) -> AppDataConfig:
 
     # Generate CA bundle if configured and missing
     if cfg.ca_bundle:
-        bundle_path = Path(cfg.ca_bundle)
-        if not bundle_path.is_absolute():
-            bundle_path = _resolve_base_path() / bundle_path
+        bundle_path = Path(get_script_folder()) / Path(cfg.ca_bundle)
+        # if not bundle_path.is_absolute():
+        #     bundle_path = _resolve_base_path() / bundle_path
         if not bundle_path.exists():
             generate_ca_bundle(bundle_path)
 
