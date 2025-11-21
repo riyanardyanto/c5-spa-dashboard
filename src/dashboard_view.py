@@ -18,7 +18,11 @@ from src.components.sidebar import Sidebar
 from src.components.table_frame import TableFrame
 from src.services.logging_service import log_exception
 from src.services.record_service import append_cards_to_csv, build_record_rows
-from src.services.spa_service import SPADataProcessor, get_url_period_loss_tree
+from src.services.spa_service import (
+    DataLossesSummary,
+    SPADataProcessor,
+    get_url_period_loss_tree,
+)
 from src.utils.app_config import AppDataConfig
 from src.utils.csvhandle import get_targets_file_path, save_user
 from src.utils.csvhandle import load_users
@@ -189,7 +193,8 @@ class DashboardView(ttk.Frame):
                 # SPADataProcessor.process performs network IO and heavy parsing
                 # which are blocking; run it on a thread to keep the Tk event loop
                 processor = SPADataProcessor(url=url, config=self.data_config)
-                processed = await processor.process_async()
+                await processor.start()
+                data_spa = await processor.get_data_spa()
             except Exception as exc:  # noqa: BLE001 - propagate via UI and log
                 log_exception("Gagal memproses data dari SPA", exc)
                 messagebox.showerror(
@@ -199,11 +204,11 @@ class DashboardView(ttk.Frame):
                 )
                 return
 
-            data_losses = processed.get("data_losses")
-            stops_reason = processed.get("stops_reason")
+            data_losses = data_spa.data_losses
+            stops_reason = data_spa.stops_reason
 
-            if isinstance(data_losses, pd.DataFrame) and not data_losses.empty:
-                range_value = data_losses.iloc[0].get("RANGE")
+            if isinstance(data_losses, DataLossesSummary):
+                range_value = data_losses.RANGE
                 if isinstance(range_value, str) and range_value.strip():
                     self.header_frame.set_time_period(f"Periode: {range_value.strip()}")
                 else:
@@ -236,29 +241,27 @@ class DashboardView(ttk.Frame):
                                 row_id, values=values
                             )
 
-            if isinstance(data_losses, pd.DataFrame) and not data_losses.empty:
+            if isinstance(data_losses, DataLossesSummary):
                 metrics_order = ["STOP", "PR", "MTBF", "UPDT", "PDT", "NATR"]
                 rows = self.table_frame.result_table.view.get_children()
                 for row_id, metric in zip(rows, metrics_order):
-                    if metric not in data_losses.columns:
-                        continue
+                    actual_value = getattr(data_losses, metric, "")
                     values = list(
                         self.table_frame.result_table.view.item(row_id, "values")
                     )
                     if len(values) < 3:
                         continue
-                    actual_value = data_losses.iloc[0][metric]
-                    values[2] = "" if pd.isna(actual_value) else str(actual_value)
+                    values[2] = "" if not actual_value else str(actual_value)
                     self.table_frame.result_table.view.item(row_id, values=values)
 
-            if isinstance(stops_reason, pd.DataFrame) and not stops_reason.empty:
+            if isinstance(stops_reason, list) and stops_reason:
                 tree = self.table_frame.issue_table.view
                 tree.delete(*tree.get_children())
-                for _, row in stops_reason.iterrows():
-                    line = row.get("Line", "")
-                    issue = row.get("Reason", "")
-                    stops = row.get("Stops", "")
-                    downtime = row.get("Downtime", "")
+                for detail in stops_reason:
+                    line = detail.Line or ""
+                    issue = detail.Detail or ""
+                    stops = detail.Stops or ""
+                    downtime = detail.Downtime or ""
                     tree.insert("", "end", values=(line, issue, stops, downtime))
         finally:
             self.header_frame.stop_progress()
@@ -423,7 +426,7 @@ class DashboardView(ttk.Frame):
             )
 
         if env_value == "development":
-            return "http://127.0.0.1:5501/assets/response.html"
+            return f"http://127.0.0.1:5501/assets/response{shift}.html"
 
         if env_value == "test":
             candidate = ""

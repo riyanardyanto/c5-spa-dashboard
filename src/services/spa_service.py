@@ -1,31 +1,20 @@
-from __future__ import annotations
-
-from io import StringIO
-from pathlib import Path
-import sys
-from typing import TYPE_CHECKING
-from typing import Union
-from urllib.parse import urlencode, urlparse
-import ssl
-
-import numpy as np
 import pandas as pd
 import httpx
-from httpx import Client, AsyncClient
-from tabulate import tabulate
+import numpy as np
+from typing import Optional, List
+from pydantic import BaseModel, Field, ValidationError
 
 from src.utils.auth import build_ntlm_auth
 from src.utils.constants import HEADERS
-from src.utils.app_config import get_base_url
-from src.utils.helpers import get_script_folder
-
-if TYPE_CHECKING:
-    from src.utils.app_config import AppDataConfig
+from src.utils.app_config import AppDataConfig
 
 
 def get_url_period_loss_tree(
     link_up: str, date: str, shift: str = "", functional_location: str = "PACK"
 ) -> str:
+    from urllib.parse import urlencode
+    from src.utils.app_config import get_base_url
+
     line_prefix = "PMID-SE-CP-L0" if link_up == "17" else "ID01-SE-CP-L0"
     params = {
         "table": "SPA_NormPeriodLossTree",
@@ -47,454 +36,274 @@ def get_url_period_loss_tree(
         "db_LineFailureAnalysis": "x",
     }
 
-    """http://ots.spappa.aws.private-pmideep.biz/db.aspx?table=SPA_NormPeriodLossTree&act=query&submit1=Search&db_Line=ID01-SE-CP-L021&db_FunctionalLocation=ID01-SE-CP-L021-MAKE&db_SegmentDateMin=2025-11-08&db_ShiftStart=&db_SegmentDateMax=&db_ShiftEnd=&db_Normalize=0&db_PeriodTime=10080&s_PeriodTime=&db_LongStopDetails=3&db_ReasonCNT=30&db_ReasonSort=stop+count&db_Language=OEM&db_LineFailureAnalysis=x"""
-
-    # Read base URL from config.ini using centralized helper
     base_url = get_base_url()
-
     return base_url + urlencode(params, doseq=True)
 
 
-class SPADataFetcher:
-    """Handles fetching data from URLs."""
-
-    def __init__(
-        self,
-        url: str,
-        *,
-        headers: dict[str, str] | None = None,
-        auth=None,
-        config: AppDataConfig | None = None,
-        session: Union[Client, AsyncClient] | None = None,
-    ) -> None:
-        self.url = url
-        self.raw_html: str | None = None
-        self._headers = headers or HEADERS
-        self._auth = auth if auth is not None else build_ntlm_auth(config)
-        self._session = session
-        self._config = config
-        # SSL verification behavior: default to True unless config disables it
-        if config is not None:
-            try:
-                self._verify_ssl = getattr(config, "verify_ssl", True)
-                self._ca_bundle = getattr(config, "ca_bundle", None)
-            except Exception:
-                self._verify_ssl = True
-                self._ca_bundle = None
-        else:
-            self._verify_ssl = True
-            self._ca_bundle = None
-
-        self._ensure_ca_bundle()
-
-    def _ensure_ca_bundle(self) -> None:
-        if self._ca_bundle is not None or not self._verify_ssl:
-            return
-        try:
-            parsed = urlparse(self.url)
-            host = parsed.hostname
-            port = parsed.port or (443 if parsed.scheme == "https" else 80)
-            cert = ssl.get_server_certificate((host, port))
-            base_path = (
-                Path(sys.executable).parent
-                if getattr(sys, "frozen", False)
-                else Path(__file__).resolve().parent.parent
-            )
-            cert_path = base_path / "server_cert.pem"
-            with open(cert_path, "w") as f:
-                f.write(cert)
-            self._ca_bundle = str(cert_path)
-        except Exception:
-            # If failed, leave as None, will use verify_ssl
-            pass
-
-    def fetch(self, session: Client | None = None) -> str:
-        """Fetch HTML content from the URL synchronously."""
-
-        if self.raw_html is not None:
-            return self.raw_html
-
-        active_session = session or self._session
-
-        if active_session is not None:
-            try:
-                response = active_session.get(
-                    self.url,
-                    headers=self._headers,
-                    auth=self._auth,
-                    follow_redirects=True,
-                    timeout=30,
-                )
-                response.raise_for_status()
-                text = response.text
-            except httpx.HTTPError as exc:
-                # Provide a clearer, actionable error message for name resolution
-                status_code = (
-                    getattr(exc.response, "status_code", "unknown")
-                    if hasattr(exc, "response")
-                    else "unknown"
-                )
-                raise RuntimeError(
-                    f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
-                    "Check network connectivity, DNS resolution for the host, "
-                    "VPN/proxy settings, and the configured base URL in config.ini."
-                ) from exc
-        else:
-            # Prepare verify value for httpx (bool or str to path of ca bundle)
-            verify_value = self._ca_bundle if self._ca_bundle else self._verify_ssl
-            with httpx.Client(verify=verify_value) as temp_session:
-                try:
-                    response = temp_session.get(
-                        self.url,
-                        headers=self._headers,
-                        auth=self._auth,
-                        follow_redirects=True,
-                        timeout=30,
-                    )
-                    response.raise_for_status()
-                    text = response.text
-                except httpx.HTTPError as exc:
-                    status_code = (
-                        getattr(exc.response, "status_code", "unknown")
-                        if hasattr(exc, "response")
-                        else "unknown"
-                    )
-                    raise RuntimeError(
-                        f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
-                        "Check network connectivity, DNS resolution for the host, "
-                        "VPN/proxy settings, and the configured base URL in config.ini."
-                    ) from exc
-
-        self.raw_html = text
-        return self.raw_html
-
-    async def fetch_async(self, session: AsyncClient | None = None) -> str:
-        """Fetch HTML content from the URL asynchronously."""
-
-        if self.raw_html is not None:
-            return self.raw_html
-
-        active_session = session or (
-            self._session if isinstance(self._session, AsyncClient) else None
-        )
-
-        if active_session is not None:
-            try:
-                response = await active_session.get(
-                    self.url,
-                    headers=self._headers,
-                    auth=self._auth,
-                    follow_redirects=True,
-                    timeout=30,
-                )
-                response.raise_for_status()
-                text = response.text
-            except httpx.HTTPError as exc:
-                # Provide a clearer, actionable error message for name resolution
-                status_code = (
-                    getattr(exc.response, "status_code", "unknown")
-                    if hasattr(exc, "response")
-                    else "unknown"
-                )
-                raise RuntimeError(
-                    f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
-                    "Check network connectivity, DNS resolution for the host, "
-                    "VPN/proxy settings, and the configured base URL in config.ini."
-                ) from exc
-        else:
-            verify_value = self._ca_bundle if self._ca_bundle else self._verify_ssl
-            async with httpx.AsyncClient(verify=verify_value) as temp_session:
-                try:
-                    response = await temp_session.get(
-                        self.url,
-                        headers=self._headers,
-                        auth=self._auth,
-                        follow_redirects=True,
-                        timeout=30,
-                    )
-                    response.raise_for_status()
-                    text = response.text
-                except httpx.HTTPError as exc:
-                    status_code = (
-                        getattr(exc.response, "status_code", "unknown")
-                        if hasattr(exc, "response")
-                        else "unknown"
-                    )
-                    raise RuntimeError(
-                        f"Failed to fetch URL '{self.url}' (status code: {status_code}): {exc}. "
-                        "Check network connectivity, DNS resolution for the host, "
-                        "VPN/proxy settings, and the configured base URL in config.ini."
-                    ) from exc
-
-        response_path = Path(get_script_folder()) / "data" / "response.html"
-        with open(response_path, "w", encoding="utf-8") as f:
-            f.write(text)
-
-        self.raw_html = text
-        return self.raw_html
+class LinePerformanceDetail(BaseModel):
+    Line: str = Field(..., description="The line identifier")
+    Detail: str = Field(..., description="Detailed description")
+    Stops: Optional[str] = Field(None, description="Number of stops")
+    Downtime: Optional[str] = Field(None, description="Downtime duration")
 
 
-class HTMLTableExtractor:
-    """Extracts and processes tables from HTML content."""
-
-    def __init__(self, html_content: str):
-        self.html_content = html_content
-        self.tables: list[pd.DataFrame] = []
-
-    def extract(self) -> list[pd.DataFrame]:
-        """Extract tables from HTML and replace empty strings with NaN."""
-        tables = pd.read_html(StringIO(self.html_content))
-        if not tables:
-            raise ValueError("No tables found in the HTML content.")
-
-        # Replace empty strings with NaN, '&nbsp;' with "", and '&nbsp' with NaN
-        self.tables = [
-            table.replace({"": np.nan, "&nbsp;": "", "&nbsp": np.nan})
-            for table in tables
-        ]
-        return self.tables
+class DataLossesSummary(BaseModel):
+    RANGE: str = Field(..., description="Time range")
+    STOP: str = Field(..., description="Stop count")
+    PR: str = Field(..., description="Performance rate")
+    MTBF: str = Field(..., description="Mean time between failures")
+    UPDT: str = Field(..., description="Unplanned downtime")
+    PDT: str = Field(..., description="Planned downtime")
+    NATR: str = Field(..., description="Natural rate loss")
 
 
-class DataFrameCleaner:
-    """Handles DataFrame cleaning operations."""
-
-    @staticmethod
-    def remove_duplicate_rows(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Remove rows where column '1' has the same value as the previous row
-        AND column '2' is NaN.
-        """
-        # Remove row that all columns are NaN
-        df = df.dropna(how="all").reset_index(drop=True)
-
-        if df.empty:
-            return df
-
-        mask = ~((df[1] == df[1].shift()) & df[2].isna())
-        mask.iloc[0] = True
-        return df[mask].reset_index(drop=True)
-
-
-class DataFrameSplitter:
-    """Splits DataFrames based on specific column values."""
-
-    def __init__(self, tables: list[pd.DataFrame]):
-        self.tables = tables
-        self.sections: list[pd.DataFrame] = []
-
-    def split_by_column_14(self) -> list[pd.DataFrame]:
-        """Split the fourth table by rows where column 14 has value 'i'."""
-        # Select the table with more than 20 rows
-        for table in self.tables:
-            if len(table) > 20:
-                datatable = table
-                break
-
-        # Remove duplicate rows
-        datatable = DataFrameCleaner.remove_duplicate_rows(datatable)
-
-        # Find indices where column 14 has value "i"
-        split_indices = np.flatnonzero(datatable[14] == "i")
-
-        if split_indices.size == 0:
-            self.sections = [datatable.copy()]
-            return self.sections
-
-        bounds = np.append(split_indices[1:], len(datatable))
-        self.sections = [
-            datatable.iloc[start:end].copy()
-            for start, end in zip(split_indices, bounds)
-        ]
-
-        return self.sections
-
-
-class StopReasonTableProcessor:
-    """Processes stop reason table from splitted tables."""
-
-    def __init__(self, splitted_tables: list[pd.DataFrame]):
-        self.splitted_tables = splitted_tables
-
-    def process(self) -> pd.DataFrame:
-        """Get and process the stops reason table from splitted tables."""
-        table = self.splitted_tables[3].iloc[1:]
-        cleaned = table.dropna(how="all")
-        stops_reason = (
-            cleaned.loc[cleaned[4].notna(), [1, 9, 2, 4]]
-            .iloc[1:]
-            .reset_index(drop=True)
-        )
-
-        stops_reason.columns = ["Line", "Reason", "Stops", "Downtime"]
-        stops_reason["Line"] = stops_reason["Line"].ffill().str.partition(" - ")[0]
-
-        return stops_reason
-
-
-class DataLossesTableProcessor:
-    """Processes data losses table from splitted tables."""
-
-    def __init__(self, splitted_tables: list[pd.DataFrame]):
-        self.splitted_tables = splitted_tables
-
-    def process(self) -> pd.DataFrame:
-        """Extract and combine data losses metrics from splitted tables."""
-        tables = self.splitted_tables
-        data = {
-            "RANGE": tables[0].iat[1, 9],
-            "STOP": tables[7].iat[1, 2],
-            "PR": tables[0].iat[5, 5],
-            "MTBF": tables[0].iat[5, 7],
-            "UPDT": tables[7].iat[1, 5],
-            "PDT": tables[6].iat[1, 5],
-            "NATR": tables[4].iat[3, 5],
-        }
-
-        return pd.DataFrame([data])
+class DataSPA(BaseModel):
+    data_losses: DataLossesSummary
+    stops_reason: List[LinePerformanceDetail]
 
 
 class SPADataProcessor:
-    """Main processor that orchestrates all data processing operations."""
+    """Processor for SPA data scraping, parsing, and validation."""
 
-    def __init__(
-        self,
-        url: str,
-        *,
-        is_html: bool = False,
-        headers: dict[str, str] | None = None,
-        auth=None,
-        config: AppDataConfig | None = None,
-        session: Union[Client, AsyncClient] | None = None,
-    ) -> None:
-        self._source = url
-        self._is_html = is_html
-        self._headers = headers or HEADERS
-        self._config = config
-        self._auth = auth if auth is not None else build_ntlm_auth(config)
-        self._session = session
-        self.fetcher: SPADataFetcher | None = None
-        self.raw_html: str | None = url if is_html else None
-        self.tables: list[pd.DataFrame] = []
-        self.splitted_tables: list[pd.DataFrame] = []
-        self.processed_data: dict[str, pd.DataFrame] = {}
+    def __init__(self, url: str, config: Optional[AppDataConfig] = None):
+        self.url = url
+        self.config = config
+        self.list_of_dfs: list[pd.DataFrame] = []
+        self.selected_table: pd.DataFrame = pd.DataFrame()
+        self.spa_dict: dict[str, pd.DataFrame] = {}
 
-        if not is_html:
-            self.fetcher = SPADataFetcher(
-                url,
-                headers=self._headers,
-                auth=self._auth,
-                config=self._config,
-                session=session,
+    async def start(self) -> None:
+        """Initialize the processor by fetching and processing data."""
+        self.list_of_dfs = await self.fetch_and_process_spa_data(self.url)
+        self.selected_table = self.select_relevant_table(self.list_of_dfs)
+        self.spa_dict = self.split_table_into_dict()
+
+    async def fetch_and_process_spa_data(self, url: str) -> list[pd.DataFrame]:
+        """Fetch SPA data from URL and return list of DataFrames."""
+        auth = build_ntlm_auth(self.config) if self.config else None
+        try:
+            async with httpx.AsyncClient(
+                auth=auth, headers=HEADERS, timeout=30
+            ) as client:
+                response = await client.get(url, follow_redirects=True)
+                response.raise_for_status()
+                from io import StringIO
+
+                list_of_dfs = pd.read_html(StringIO(response.text), encoding="utf-8")
+            return list_of_dfs
+        except httpx.HTTPError as exc:
+            status_code = (
+                getattr(exc.response, "status_code", "unknown")
+                if hasattr(exc, "response")
+                else "unknown"
             )
-
-    def process(
-        self,
-        *,
-        session: Union[Client, AsyncClient] | None = None,
-        force: bool = False,
-    ) -> dict[str, pd.DataFrame]:
-        """Execute the full data processing pipeline synchronously."""
-
-        if self.processed_data and not force:
-            return self.processed_data
-
-        if self.raw_html is None:
-            if self.fetcher is None:
-                self.fetcher = SPADataFetcher(
-                    self._source,
-                    headers=self._headers,
-                    auth=self._auth,
-                    config=self._config,
-                    session=self._session,
-                )
-            self.raw_html = self.fetcher.fetch(session=session)
-        # Perform the cpu-bound parsing and processing synchronously
-        self._compute_processed_data()
-
-        return self.processed_data
-
-    def _compute_processed_data(self) -> dict[str, pd.DataFrame]:
-        """Synchronous processing of raw HTML into DataFrames.
-
-        This method is CPU-bound and intentionally synchronous; callers that wish
-        to avoid blocking the event loop should run it in a background thread.
-        """
-        extractor = HTMLTableExtractor(self.raw_html)
-        self.tables = extractor.extract()
-
-        splitter = DataFrameSplitter(self.tables)
-        self.splitted_tables = splitter.split_by_column_14()
-
-        self.processed_data = {
-            "data_losses": DataLossesTableProcessor(self.splitted_tables).process(),
-            "stops_reason": StopReasonTableProcessor(self.splitted_tables).process(),
-        }
-        return self.processed_data
-
-    async def process_async(
-        self,
-        *,
-        session: AsyncClient | None = None,
-        force: bool = False,
-    ) -> dict[str, pd.DataFrame]:
-        """Execute the full data processing pipeline asynchronously."""
-
-        if self.processed_data and not force:
-            return self.processed_data
-
-        if self.raw_html is None:
-            if self.fetcher is None:
-                self.fetcher = SPADataFetcher(
-                    self._source,
-                    headers=self._headers,
-                    auth=self._auth,
-                    config=self._config,
-                    session=self._session,
-                )
-            self.raw_html = await self.fetcher.fetch_async(session=session)
-
-        import asyncio as _asyncio
-
-        # Offload blocking parsing and DataFrame processing to a worker thread
-        await _asyncio.to_thread(self._compute_processed_data)
-        return self.processed_data
-
-    def save_results(self, output_format: str = "psql") -> None:
-        """Save processed data to files after ensuring processing."""
-
-        self.process()
-
-        for key, df in self.processed_data.items():
-            filename = f"{key}.txt"
-            with open(filename, "w", encoding="utf-8") as file_handle:
-                file_handle.write(
-                    tabulate(
-                        df,
-                        headers="keys",
-                        tablefmt=output_format,
-                        showindex=False,
-                    )
-                )
-
-    def display_results(self) -> None:
-        """Display processed data to console."""
-
-        if not self.processed_data:
             raise RuntimeError(
-                "Data belum diproses. Panggil 'process()' sebelum tampilkan hasil."
+                f"Failed to fetch URL '{url}' (status code: {status_code}): {exc}. \n"
+                "Check network connectivity, DNS resolution for the host, \n"
+                "VPN/proxy settings, and the configured base URL in config.ini."
+            ) from exc
+
+    def select_relevant_table(self, list_of_dfs: list[pd.DataFrame]) -> pd.DataFrame:
+        """Select the relevant table from list of DataFrames."""
+        self.selected_table = next(
+            (df for df in list_of_dfs if len(df) > 20), pd.DataFrame()
+        )
+        return self.selected_table
+
+    def split_table_into_dict(self) -> dict[str, pd.DataFrame]:
+        """Split the selected table into a dictionary of sections."""
+        # Split the dataframe based on index of column 14 that contains "i"
+        split_indices = np.where(self.selected_table.iloc[:, 14] == "i")[0].tolist()
+        split_indices = [0] + split_indices + [len(self.selected_table)]
+        sections = [
+            self.selected_table.iloc[start:end].copy()
+            for start, end in zip(split_indices, split_indices[1:])
+        ]
+
+        # Create a dictionary mapping keys to their corresponding dataframes
+        spa_dict: dict[str, pd.DataFrame] = {}
+        for section in sections:
+            if len(section) < 2:
+                continue
+            key = str(section.iloc[0, 1]).replace(" ", "_").lower()
+            spa_dict[key] = section.reset_index(drop=True)
+
+        # Remove rows from spa_dict['time_range'] where column 2 and 3 values are 'nan'
+        if "time_range" in spa_dict:
+            spa_dict["time_range"] = spa_dict["time_range"].dropna(subset=[2, 3])
+
+        return spa_dict
+
+    async def get_line_performance_details(self) -> List[LinePerformanceDetail]:
+        """Extract and validate line performance details."""
+        try:
+            # Process the "line_performance_details" dataframe
+            line_performance_details = self.spa_dict.get(
+                "line_performance_details", pd.DataFrame()
+            )
+            if line_performance_details.empty:
+                return []
+
+            line_performance_details = (
+                line_performance_details[[1, 9, 2, 4]].iloc[1:].reset_index(drop=True)
             )
 
-        for key, df in self.processed_data.items():
-            print(f"\n=== {key.upper()} ===")
-            print(tabulate(df, headers="keys", tablefmt="psql", showindex=False))
+            # Normalize column 0: remove HTML non-breaking spaces and actual NBSP char,
+            # strip whitespace (but don't remove letters like 'a'), treat empty/'nan' as missing,
+            # forward-fill, then keep the left part before the first ' - ' if present.
+            col = line_performance_details.iloc[:, 0]
+
+            # Replace HTML entity and NBSP char, then strip surrounding whitespace
+            col = (
+                col.astype(str)
+                .str.replace("&nbsp;", "", regex=False)
+                .str.replace("&nbsp", "", regex=False)
+                .str.strip()
+            )
+
+            # Convert empty strings and literal 'nan' (from astype) to missing values
+            col = col.replace({"": pd.NA, "nan": pd.NA})
+
+            # Forward-fill missing values then partition on ' - '
+            col = col.ffill().str.partition(" - ")[0]
+
+            line_performance_details.iloc[:, 0] = col
+
+            # Remove rows where column 2 is NaN
+            line_performance_details = line_performance_details.dropna(subset=[2])
+
+            # Update column names
+            line_performance_details.columns = [
+                "Line",
+                "Detail",
+                "Stops",
+                "Downtime",
+            ]
+
+            # Convert DataFrame to list of LinePerformanceDetail
+            details = []
+            for _, row in line_performance_details.iterrows():
+                try:
+                    detail = LinePerformanceDetail(
+                        Line=str(row["Line"]),
+                        Detail=str(row["Detail"]),
+                        Stops=str(row["Stops"]) if pd.notna(row["Stops"]) else None,
+                        Downtime=str(row["Downtime"])
+                        if pd.notna(row["Downtime"])
+                        else None,
+                    )
+                    details.append(detail)
+                except ValidationError:
+                    # Skip invalid rows
+                    continue
+
+            return details
+        except Exception as e:
+            raise ValueError(f"Failed to extract line performance details: {e}") from e
+
+    async def get_data_losses_summary(self) -> DataLossesSummary:
+        """Extract and validate data losses summary from the selected table."""
+        try:
+            data = {
+                "RANGE": self.spa_dict["time_range"].iat[1, 9],
+                "STOP": self.spa_dict["unplanned"].iat[1, 2],
+                "PR": self.spa_dict["time_range"].iat[5, 5],
+                "MTBF": self.spa_dict["time_range"].iat[5, 7],
+                "UPDT": self.spa_dict["unplanned"].iat[1, 5],
+                "PDT": self.spa_dict["planned"].iat[1, 5],
+                "NATR": self.spa_dict["rate_loss"].iat[3, 5],
+            }
+            # Convert to strings and handle NaN
+            cleaned_data = {k: ("" if pd.isna(v) else str(v)) for k, v in data.items()}
+            return DataLossesSummary(**cleaned_data)
+        except ValidationError as ve:
+            raise ValueError(
+                f"Pydantic validation error in data losses summary: {ve}"
+            ) from ve
+        except Exception as e:
+            raise ValueError(f"Failed to extract data losses summary: {e}") from e
+
+    async def get_data_spa(self) -> DataSPA:
+        """Get the complete SPA data as a structured model."""
+        data_losses = await self.get_data_losses_summary()
+        stops_reason = await self.get_line_performance_details()
+        return DataSPA(data_losses=data_losses, stops_reason=stops_reason)
 
 
-def main() -> None:
-    processor = SPADataProcessor("http://127.0.0.1:5501/assets/spa1.html")
-    processor.process()
-    processor.display_results()
-    processor.save_results()
+def main():
+    # Example usage
+    url = "http://127.0.0.1:5501/assets/response.html"
+    config = AppDataConfig(
+        environment="development",
+        username="user",
+        password="pass",
+        link_up=("LU18", "LU21"),
+        url=url,
+        verify_ssl=True,
+    )
+
+    import asyncio
+
+    async def run():
+        from tabulate import tabulate
+
+        processor = SPADataProcessor(url, config)
+        await processor.start()
+        data_spa = await processor.get_data_spa()
+
+        with open("x1 data_losses.txt", "w", encoding="utf-8") as f:
+            f.write("Data Losses Summary:\n")
+            f.write(
+                tabulate(
+                    [data_spa.data_losses.model_dump().values()],
+                    headers=data_spa.data_losses.model_dump().keys(),
+                    tablefmt="psql",
+                )
+            )
+            f.write("\n\n")
+
+        with open("x2 line_performance_details.txt", "w", encoding="utf-8") as f:
+            f.write("Line Performance Details:\n")
+            # Convert list of models to list of dicts for tabulate
+            details_data = [detail.model_dump() for detail in data_spa.stops_reason]
+            if details_data:
+                f.write(tabulate(details_data, headers="keys", tablefmt="psql"))
+            else:
+                f.write("No data available.\n")
+            f.write("\n\n")
+
+        # print("Data Losses Summary:")
+        # print(data_losses)
+
+    asyncio.run(run())
 
 
 if __name__ == "__main__":
     main()
+
+
+# # Legacy functions for backward compatibility (can be removed if not needed)
+# async def fetch_and_process_spa_data(url: str, config: Optional[AppDataConfig] = None):
+#     processor = SPADataProcessor(url, config)
+#     await processor.initialize()
+#     return processor.list_of_dfs
+
+
+# def select_relevant_table(list_of_dfs: list[pd.DataFrame]) -> pd.DataFrame:
+#     processor = SPADataProcessor("", None)
+#     return processor.select_relevant_table(list_of_dfs)
+
+
+# def split_table_into_dict(selected_table: pd.DataFrame) -> dict[str, pd.DataFrame]:
+#     processor = SPADataProcessor("", None)
+#     return processor.split_table_into_dict(selected_table)
+
+
+# async def get_line_performance_details() -> pd.DataFrame:
+#     # This would need a processor instance, but for legacy, perhaps not
+#     pass
+
+
+# async def get_data_losses_summary() -> DataLossesSummary:
+#     # This would need a processor instance
+#     pass

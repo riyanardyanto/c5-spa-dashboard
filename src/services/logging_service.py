@@ -8,6 +8,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
+from src.utils.app_config import read_config
 from src.utils.helpers import get_script_folder
 
 
@@ -31,23 +32,31 @@ def get_logger() -> logging.Logger:
     if _logger:
         return _logger
 
-    log_dir = _ensure_log_directory()
-    log_path = log_dir / LOG_FILENAME
+    config = read_config()
+    environment = config.environment
 
     logger = logging.getLogger("app")
     logger.setLevel(logging.INFO)
-
-    handler = RotatingFileHandler(
-        log_path,
-        maxBytes=LOG_MAX_BYTES,
-        backupCount=LOG_BACKUP_COUNT,
-        encoding="utf-8",
-    )
 
     formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    if environment == "development":
+        # In development, log to console
+        handler = logging.StreamHandler(sys.stderr)
+    else:
+        # In production, log to file
+        log_dir = _ensure_log_directory()
+        log_path = log_dir / LOG_FILENAME
+        handler = RotatingFileHandler(
+            log_path,
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+
     handler.setFormatter(formatter)
 
     # Avoid duplicate handlers when get_logger is called multiple times

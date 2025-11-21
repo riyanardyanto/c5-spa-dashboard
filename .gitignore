@@ -12,6 +12,7 @@ logs/
 *.log
 
 # Configuration secrets
+config/
 config.ini
 
 # Data directories

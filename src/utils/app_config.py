@@ -87,14 +87,14 @@ def _resolve_base_path() -> Path:
 def get_config_path() -> Path:
     """Return the absolute path to the application configuration file."""
 
-    return _resolve_base_path() / CONFIG_FILENAME
+    return _resolve_base_path() / "config" / CONFIG_FILENAME
 
 
 def create_config(path: Path | None = None) -> Path:
     """Create a default configuration file when none exists."""
 
     config = ConfigParser()
-    link_up = ["LU18", "LU21", "LU26", "LU27"]
+    link_up = ["LU18", "LU21", "LU26", "LU24"]
     config["DEFAULT"] = {
         "environment": "production",
         "username": "",
@@ -105,14 +105,31 @@ def create_config(path: Path | None = None) -> Path:
         # set `verify_ssl` to False or provide `ca_bundle` with a path
         # to a PEM file containing your certificate(s).
         "verify_ssl": "True",
-        "ca_bundle": "",
+        "ca_bundle": "config/ca-bundle.pem",
     }
 
     target_path = path or get_config_path()
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     with target_path.open("w", encoding="utf-8") as handle:
         config.write(handle)
 
     return target_path
+
+
+def generate_ca_bundle(bundle_path: Path) -> None:
+    """Generate the CA bundle file from certificate assets."""
+
+    assets_path = _resolve_base_path() / "assets"
+    sub_ca_path = assets_path / "PMI Sub CA v3.crt"
+    aws_ca_path = assets_path / "PMI AWS CA v3.crt"
+
+    if not sub_ca_path.exists() or not aws_ca_path.exists():
+        return  # Skip if certificate files are missing
+
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
+    with bundle_path.open("w", encoding="utf-8") as bundle_file:
+        bundle_file.write(sub_ca_path.read_text(encoding="utf-8"))
+        bundle_file.write(aws_ca_path.read_text(encoding="utf-8"))
 
 
 def read_config(section: str | None = None) -> AppDataConfig:
@@ -125,7 +142,17 @@ def read_config(section: str | None = None) -> AppDataConfig:
         create_config(config_path)
 
     parser.read(config_path, encoding="utf-8")
-    return AppDataConfig.from_parser(parser, section=section)
+    cfg = AppDataConfig.from_parser(parser, section=section)
+
+    # Generate CA bundle if configured and missing
+    if cfg.ca_bundle:
+        bundle_path = Path(cfg.ca_bundle)
+        if not bundle_path.is_absolute():
+            bundle_path = _resolve_base_path() / bundle_path
+        if not bundle_path.exists():
+            generate_ca_bundle(bundle_path)
+
+    return cfg
 
 
 def get_base_url(section: str | None = None) -> str:
