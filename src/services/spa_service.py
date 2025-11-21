@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, ValidationError
 from src.utils.auth import build_ntlm_auth
 from src.utils.constants import HEADERS
 from src.utils.app_config import AppDataConfig
+from src.utils.helpers import resource_path
 
 
 def get_url_period_loss_tree(
@@ -82,8 +83,17 @@ class SPADataProcessor:
         """Fetch SPA data from URL and return list of DataFrames."""
         auth = build_ntlm_auth(self.config) if self.config else None
         try:
+            # Determine TLS verification behaviour based on config
+            verify: bool | str = True
+            if self.config is not None:
+                if not self.config.verify_ssl:
+                    verify = False
+                elif self.config.ca_bundle:
+                    # Resolve path compatible with PyInstaller/runtime
+                    verify = resource_path(self.config.ca_bundle)
+
             async with httpx.AsyncClient(
-                auth=auth, headers=HEADERS, timeout=30
+                auth=auth, headers=HEADERS, timeout=30, verify=verify
             ) as client:
                 response = await client.get(url, follow_redirects=True)
                 response.raise_for_status()

@@ -57,6 +57,41 @@ verify_ssl = True
 ca_bundle =
 ```
 
+Details and recommendations:
+
+- **Preferred (secure):** Keep `verify_ssl = True` and provide a `ca_bundle`
+  containing your private CA certificate(s) if the SPA server uses a
+  self-signed certificate or internal CA. By default the project can
+  generate `config/ca-bundle.pem` from `assets/PMI Sub CA v3.crt` and
+  `assets/PMI AWS CA v3.crt` (see `src.utils.app_config.generate_ca_bundle`).
+
+- **Temporary troubleshooting:** Set `verify_ssl = False` only while
+  diagnosing certificate problems on a trusted network. Disabling TLS
+  verification weakens security and should not be used in production.
+
+- **Path resolution:** `ca_bundle` is resolved using the app helper so a
+  relative path like `config/ca-bundle.pem` works both when running
+  normally and when the app is packaged with PyInstaller.
+
+Example `config.ini` for using a generated CA bundle:
+
+```ini
+[DEFAULT]
+environment = production
+username = myuser
+password = mypass
+url = https://ots.spappa.aws.private-pmideep.biz/db.aspx?
+verify_ssl = True
+ca_bundle = config/ca-bundle.pem
+```
+
+If you prefer to skip verification for a quick test:
+
+```ini
+verify_ssl = False
+ca_bundle =
+```
+
 ---
 
 ## Building a Standalone Executable
