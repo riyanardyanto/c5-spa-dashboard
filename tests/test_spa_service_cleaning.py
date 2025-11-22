@@ -1,7 +1,7 @@
 import asyncio
 import pandas as pd
 
-from src.services.spa_service import SPADataProcessor, LinePerformanceDetail
+from src.services.spa_service import SPADataProcessor
 
 
 def test_line_performance_cleaning_and_partition():

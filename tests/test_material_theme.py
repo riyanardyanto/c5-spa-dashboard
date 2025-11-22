@@ -1,6 +1,5 @@
 import re
 
-import pytest
 
 from src.utils import material_theme
 

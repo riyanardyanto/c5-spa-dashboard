@@ -66,6 +66,22 @@ class DataSPA(BaseModel):
     stops_reason: List[LinePerformanceDetail]
 
 
+class MaxRetriesExceededError(RuntimeError):
+    """Raised when SPA data retrieval fails after configured retries.
+
+    The message should be safe to show to end users (no sensitive internals).
+    """
+
+    def __init__(
+        self, url: str, attempts: int, last_exception: Optional[Exception] = None
+    ):
+        msg = f"Tidak dapat mengambil data dari '{url}' setelah {attempts} percobaan."
+        super().__init__(msg)
+        self.url = url
+        self.attempts = attempts
+        self.__cause__ = last_exception
+
+
 class SPADataProcessor:
     """Processor for SPA data scraping, parsing, and validation."""
 
@@ -139,16 +155,13 @@ class SPADataProcessor:
             logging.info("SPADataProcessor: retrying in %.1f seconds...", delay)
             await asyncio.sleep(delay)
 
-        # Exhausted retries: raise last exception if present, otherwise raise RuntimeError
-        if last_exception:
-            raise last_exception
-        raise RuntimeError(
-            f"Failed to obtain relevant SPA table from '{self.url}' after {self.max_retries} attempts"
-        )
+        # Exhausted retries: raise a custom error the UI can display
+        raise MaxRetriesExceededError(self.url, self.max_retries, last_exception)
 
     async def fetch_and_process_spa_data(self, url: str) -> list[pd.DataFrame]:
         """Fetch SPA data from URL and return list of DataFrames."""
         auth = build_ntlm_auth(self.config) if self.config else None
+
         try:
             # Determine TLS verification behaviour based on config
             verify: bool | str = True

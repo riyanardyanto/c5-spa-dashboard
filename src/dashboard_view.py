@@ -21,6 +21,7 @@ from src.services.record_service import append_cards_to_csv, build_record_rows
 from src.services.spa_service import (
     DataLossesSummary,
     SPADataProcessor,
+    MaxRetriesExceededError,
     get_url_period_loss_tree,
 )
 from src.utils.app_config import AppDataConfig
@@ -195,6 +196,16 @@ class DashboardView(ttk.Frame):
                 processor = SPADataProcessor(url=url, config=self.data_config)
                 await processor.start()
                 data_spa = await processor.get_data_spa()
+            except MaxRetriesExceededError as exc:
+                # Friendly warning for retry exhaustion
+                log_exception("Gagal memproses data dari SPA (max retries)", exc)
+                messagebox.showwarning(
+                    "Gagal mengambil data",
+                    f"Gagal mengambil data dari SPA setelah {exc.attempts} kali percobaan. "
+                    "Periksa koneksi jaringan Anda atau coba lagi nanti.",
+                    parent=self,
+                )
+                return
             except Exception as exc:  # noqa: BLE001 - propagate via UI and log
                 log_exception("Gagal memproses data dari SPA", exc)
                 messagebox.showerror(
