@@ -3,6 +3,8 @@ import pandas as pd
 import httpx
 import numpy as np
 from typing import Optional, List
+import asyncio
+import logging
 from pydantic import BaseModel, Field, ValidationError
 
 from src.utils.auth import build_ntlm_auth
@@ -67,18 +69,82 @@ class DataSPA(BaseModel):
 class SPADataProcessor:
     """Processor for SPA data scraping, parsing, and validation."""
 
-    def __init__(self, url: str, config: Optional[AppDataConfig] = None):
+    def __init__(
+        self,
+        url: str,
+        config: Optional[AppDataConfig] = None,
+        *,
+        max_retries: int = 5,
+        backoff_factor: float = 1.0,
+    ):
         self.url = url
         self.config = config
         self.list_of_dfs: list[pd.DataFrame] = []
         self.selected_table: pd.DataFrame = pd.DataFrame()
         self.spa_dict: dict[str, pd.DataFrame] = {}
+        # Retry configuration (exposed as constructor params)
+        self.max_retries: int = max_retries
+        # backoff_factor in seconds, delay = backoff_factor * (2 ** (attempt-1))
+        self.backoff_factor: float = backoff_factor
 
     async def start(self) -> None:
-        """Initialize the processor by fetching and processing data."""
-        self.list_of_dfs = await self.fetch_and_process_spa_data(self.url)
-        self.selected_table = self.select_relevant_table(self.list_of_dfs)
-        self.spa_dict = self.split_table_into_dict()
+        """Initialize the processor by fetching and processing data.
+
+        This method will retry fetching when either an exception occurs
+        during fetch or when no relevant table is found (i.e. selected
+        table is empty). Retries use exponential backoff up to
+        `self.max_retries` attempts.
+        """
+        attempt = 0
+        last_exception: Optional[Exception] = None
+
+        while attempt < self.max_retries:
+            attempt += 1
+            try:
+                logging.debug("SPADataProcessor: fetch attempt %d", attempt)
+                self.list_of_dfs = await self.fetch_and_process_spa_data(self.url)
+                self.selected_table = self.select_relevant_table(self.list_of_dfs)
+
+                if not self.selected_table.empty:
+                    # success
+                    self.spa_dict = self.split_table_into_dict()
+                    logging.debug(
+                        "SPADataProcessor: fetched and parsed successfully on attempt %d",
+                        attempt,
+                    )
+                    return
+
+                # No relevant table found
+                logging.warning(
+                    "SPADataProcessor: no relevant table found on attempt %d/%d",
+                    attempt,
+                    self.max_retries,
+                )
+
+            except Exception as exc:  # catch fetch/parse errors and retry
+                last_exception = exc
+                logging.warning(
+                    "SPADataProcessor: fetch failed on attempt %d/%d: %s",
+                    attempt,
+                    self.max_retries,
+                    exc,
+                )
+
+            # If we reach here, either selected_table was empty or an exception occurred
+            if attempt >= self.max_retries:
+                break
+
+            # exponential backoff
+            delay = self.backoff_factor * (2 ** (attempt - 1))
+            logging.info("SPADataProcessor: retrying in %.1f seconds...", delay)
+            await asyncio.sleep(delay)
+
+        # Exhausted retries: raise last exception if present, otherwise raise RuntimeError
+        if last_exception:
+            raise last_exception
+        raise RuntimeError(
+            f"Failed to obtain relevant SPA table from '{self.url}' after {self.max_retries} attempts"
+        )
 
     async def fetch_and_process_spa_data(self, url: str) -> list[pd.DataFrame]:
         """Fetch SPA data from URL and return list of DataFrames."""
@@ -110,7 +176,8 @@ class SPADataProcessor:
                 else "unknown"
             )
             raise RuntimeError(
-                f"Failed to fetch URL '{url}' (status code: {status_code}): {exc}. \n"
+                f"Failed to fetch URL '{url}' \n"
+                f"(status code: {status_code}): {exc}. \n"
                 "Check network connectivity, DNS resolution for the host, \n"
                 "VPN/proxy settings, and the configured base URL in config.ini."
             ) from exc

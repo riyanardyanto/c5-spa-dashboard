@@ -100,7 +100,7 @@ def create_config(path: Path | None = None) -> Path:
         # If you are using self-signed certificates or a private CA,
         # set `verify_ssl` to False or provide `ca_bundle` with a path
         # to a PEM file containing your certificate(s).
-        "verify_ssl": "True",
+        "verify_ssl": "False",
         "ca_bundle": "config/ca-bundle.pem",
     }
 
@@ -118,14 +118,16 @@ def generate_ca_bundle(bundle_path: Path) -> None:
     assets_path = Path(resource_path("assets"))
     sub_ca_path = assets_path / "PMI Sub CA v3.crt"
     aws_ca_path = assets_path / "PMI AWS CA v3.crt"
+    spa_ca_path = assets_path / "ots.spappa.aws.private-pmideep.biz.crt"
 
-    if not sub_ca_path.exists() or not aws_ca_path.exists():
+    if not sub_ca_path.exists() or not aws_ca_path.exists() or not spa_ca_path.exists():
         return  # Skip if certificate files are missing
 
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     with bundle_path.open("w", encoding="utf-8") as bundle_file:
         bundle_file.write(sub_ca_path.read_text(encoding="utf-8"))
         bundle_file.write(aws_ca_path.read_text(encoding="utf-8"))
+        bundle_file.write(spa_ca_path.read_text(encoding="utf-8"))
 
 
 def read_config(section: str | None = None) -> AppDataConfig:
