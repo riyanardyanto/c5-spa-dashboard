@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Tuple
+import os
 
 from configparser import ConfigParser
 
@@ -141,9 +142,27 @@ def read_config(section: str | None = None) -> AppDataConfig:
 
     # Generate CA bundle if configured and missing
     if cfg.ca_bundle:
-        bundle_path = Path(get_script_folder()) / Path(cfg.ca_bundle)
-        # if not bundle_path.is_absolute():
-        #     bundle_path = _resolve_base_path() / bundle_path
+        ca_path = Path(cfg.ca_bundle)
+
+        # If the configured path is absolute, use it directly.
+        if ca_path.is_absolute():
+            bundle_path = ca_path
+        else:
+            # For relative paths, place the bundle next to the script/exe.
+            # `get_script_folder()` already handles PyInstaller frozen apps.
+            bundle_path = Path(get_script_folder()) / ca_path
+
+            # If creating directories next to the executable fails (e.g.
+            # because the exe lives in a protected location), fall back to
+            # a per-user APPDATA location so we can still generate the
+            # bundle and have a writable path.
+            try:
+                bundle_path.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                appdata_dir = Path(os.getenv("APPDATA") or Path.home())
+                bundle_path = appdata_dir / "SPA-Dashboard" / ca_path
+                bundle_path.parent.mkdir(parents=True, exist_ok=True)
+
         if not bundle_path.exists():
             generate_ca_bundle(bundle_path)
 

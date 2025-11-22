@@ -1,3 +1,4 @@
+from pathlib import Path
 import pandas as pd
 import httpx
 import numpy as np
@@ -7,7 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 from src.utils.auth import build_ntlm_auth
 from src.utils.constants import HEADERS
 from src.utils.app_config import AppDataConfig
-from src.utils.helpers import resource_path
+from src.utils.helpers import get_script_folder
 
 
 def get_url_period_loss_tree(
@@ -90,7 +91,7 @@ class SPADataProcessor:
                     verify = False
                 elif self.config.ca_bundle:
                     # Resolve path compatible with PyInstaller/runtime
-                    verify = resource_path(self.config.ca_bundle)
+                    verify = Path(get_script_folder()) / self.config.ca_bundle
 
             async with httpx.AsyncClient(
                 auth=auth, headers=HEADERS, timeout=30, verify=verify
@@ -101,6 +102,7 @@ class SPADataProcessor:
 
                 list_of_dfs = pd.read_html(StringIO(response.text), encoding="utf-8")
             return list_of_dfs
+
         except httpx.HTTPError as exc:
             status_code = (
                 getattr(exc.response, "status_code", "unknown")
